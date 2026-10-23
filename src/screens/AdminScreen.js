@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,13 @@ import {
   StyleSheet,
   Alert,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES } from '../constants/data';
 
-export default function AdminScreen({ navigation }) {  const {
+export default function AdminScreen({ navigation }) {
+  const {
     currentUser,
     products,
     stores,
@@ -28,6 +30,7 @@ export default function AdminScreen({ navigation }) {  const {
     updateOrderStatus,
     saveVoucher,
     deleteVoucher,
+    fetchAllData,
   } = useApp();
 
   const role = currentUser?.role || 'customer';
@@ -36,15 +39,16 @@ export default function AdminScreen({ navigation }) {  const {
   const isShipper = role === 'shipper';
   const vendorStoreId = currentUser?.store?.id || 1;
 
-  // Tab cho Admin & Vendor: 'stats' | 'products' | 'orders' | 'vouchers'
   const [activeTab, setActiveTab] = useState('stats');
-
-  // Tab riêng cho Shipper: 'available' (Chờ nhận) | 'my_deliveries' (Đơn của tôi)
   const [shipperTab, setShipperTab] = useState('available');
+  const [refreshing, setRefreshing] = useState(false);
 
-  // ==========================================
-  // STATE FORM SẢN PHẨM (CHỈ DÀNH CHO VENDOR)
-  // ==========================================
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchAllData();
+    setRefreshing(false);
+  }, [fetchAllData]);
+
   const [editingProdId, setEditingProdId] = useState(0);
   const [prodName, setProdName] = useState('');
   const [prodCategory, setProdCategory] = useState('Trà sữa');
@@ -55,17 +59,11 @@ export default function AdminScreen({ navigation }) {  const {
   const [prodBestSeller, setProdBestSeller] = useState(false);
   const [prodAvailable, setProdAvailable] = useState(true);
 
-  // ==========================================
-  // STATE MODAL CẢNH CÁO / GỠ MÓN VI PHẠM (DÀNH CHO ADMIN)
-  // ==========================================
   const [warnModalVisible, setWarnModalVisible] = useState(false);
   const [warnTargetProduct, setWarnTargetProduct] = useState(null);
-  const [warnMode, setWarnMode] = useState('warn'); // 'warn' (Chỉ cảnh cáo) | 'delete' (Gỡ món & Cảnh cáo)
+  const [warnMode, setWarnMode] = useState('warn');
   const [warnMessage, setWarnMessage] = useState('');
 
-  // ==========================================
-  // STATE FORM VOUCHER (DÀNH CHO CẢ ADMIN & VENDOR)
-  // ==========================================
   const [editingVoucherId, setEditingVoucherId] = useState(0);
   const [vCode, setVCode] = useState('');
   const [vTitle, setVTitle] = useState('');
@@ -77,9 +75,6 @@ export default function AdminScreen({ navigation }) {  const {
 
   const formatCurrency = (val) => `${Number(val || 0).toLocaleString('vi-VN')}đ`;
 
-  // ==========================================
-  // DỮ LIỆU ĐÃ LỌC THEO QUYỀN HẠN
-  // ==========================================
   const managedProducts = useMemo(() => {
     if (isAdmin) return products;
     return products.filter((p) => Number(p.store_id) === Number(vendorStoreId));
@@ -100,7 +95,6 @@ export default function AdminScreen({ navigation }) {  const {
     return warnings.filter((w) => Number(w.store_id) === Number(vendorStoreId));
   }, [warnings, isAdmin, vendorStoreId]);
 
-  // Danh sách đơn cho Tài xế (Shipper)
   const shipperAvailableOrders = useMemo(() => {
     return orders.filter((o) => o.status === 'Chờ tài xế nhận');
   }, [orders]);
@@ -109,7 +103,6 @@ export default function AdminScreen({ navigation }) {  const {
     return orders.filter((o) => o.shipper_username === currentUser?.username);
   }, [orders, currentUser]);
 
-  // Thống kê Doanh thu & Hoa hồng 10%
   const analytics = useMemo(() => {
     const validOrders = managedOrders.filter((o) => o.status !== 'Đã hủy');
     const completedOrders = managedOrders.filter((o) => o.status === 'Hoàn tất');
@@ -135,9 +128,6 @@ export default function AdminScreen({ navigation }) {  const {
     };
   }, [managedOrders, managedProducts]);
 
-  // =========================================================
-  // GIAO DIỆN RIÊNG DÀNH CHO TÀI XẾ GIAO HÀNG (SHIPPER VIEW)
-  // =========================================================
   if (isShipper) {
     const handleAcceptDelivery = async (orderCode) => {
       const res = await updateOrderStatus(orderCode, 'Đang giao hàng', {
@@ -145,10 +135,7 @@ export default function AdminScreen({ navigation }) {  const {
         fullName: currentUser.fullName,
       });
       if (res.success) {
-        Alert.alert(
-          '🛵 Đã nhận đơn!',
-          `Bạn đã nhận giao đơn #${orderCode}. Hãy đến quán lấy món và giao cho khách nhé!`
-        );
+        Alert.alert('Đã nhận đơn', `Bạn đã nhận đơn #${orderCode}.`);
         setShipperTab('my_deliveries');
       } else {
         Alert.alert('Lỗi', res.message);
@@ -157,19 +144,16 @@ export default function AdminScreen({ navigation }) {  const {
 
     const handleCompleteDelivery = (orderCode) => {
       Alert.alert(
-        'Xác nhận giao hàng thành công',
-        `Bạn đã giao đơn #${orderCode} tận tay khách hàng và hoàn tất thu tiền (nếu COD)?`,
+        'Xác nhận giao hàng',
+        `Đã giao đơn #${orderCode} và hoàn tất thu tiền?`,
         [
-          { text: 'Chưa xong', style: 'cancel' },
+          { text: 'Chưa', style: 'cancel' },
           {
-            text: '✅ Đã giao Hoàn tất',
+            text: 'Đã giao xong',
             onPress: async () => {
               const res = await updateOrderStatus(orderCode, 'Hoàn tất');
               if (res.success) {
-                Alert.alert(
-                  '🎉 Hoàn tất đơn hàng!',
-                  `Đơn #${orderCode} đã chuyển sang trạng thái Hoàn tất.`
-                );
+                Alert.alert('Thành công', `Đơn #${orderCode} đã hoàn tất.`);
               }
             },
           },
@@ -182,21 +166,21 @@ export default function AdminScreen({ navigation }) {  const {
 
     return (
       <View style={styles.container}>
-        <View style={[styles.roleHeader, { backgroundColor: '#0D47A1', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
+        <View style={[styles.roleHeader, { backgroundColor: '#0D47A1' }]}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.roleHeaderTitle}>
-              🛵 TRUNG TÂM ĐIỀU PHỐI TÀI XẾ: {currentUser.fullName}
+              🛵 TÀI XẾ: {currentUser.fullName}
             </Text>
             <Text style={styles.roleHeaderSub}>
-              Nhận đơn các quán đã pha chế xong & Xác nhận giao hàng hoàn tất
+              Nhận và điều phối đơn giao hàng
             </Text>
           </View>
 
           <TouchableOpacity
-            style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8 }}
+            style={styles.profileShortcutBtn}
             onPress={() => navigation.navigate('Profile')}
           >
-            <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>👤 Hồ sơ</Text>
+            <Text style={styles.profileShortcutText}>Hồ sơ</Text>
           </TouchableOpacity>
         </View>
 
@@ -214,7 +198,7 @@ export default function AdminScreen({ navigation }) {  const {
                 shipperTab === 'available' && styles.tabTextActive,
               ]}
             >
-              📡 Đơn chờ nhận ({shipperAvailableOrders.length})
+              Đơn chờ nhận ({shipperAvailableOrders.length})
             </Text>
           </TouchableOpacity>
 
@@ -231,72 +215,70 @@ export default function AdminScreen({ navigation }) {  const {
                 shipperTab === 'my_deliveries' && styles.tabTextActive,
               ]}
             >
-              🛵 Đơn của tôi ({shipperMyOrders.length})
+              Đơn của tôi ({shipperMyOrders.length})
             </Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0D47A1']} />
+          }
+        >
           {listToShow.length === 0 ? (
             <View style={styles.card}>
               <Text style={{ textAlign: 'center', color: '#757575', padding: 20 }}>
                 {shipperTab === 'available'
-                  ? 'Hiện chưa có đơn hàng nào ở trạng thái "Chờ tài xế nhận".'
-                  : 'Bạn chưa nhận giao đơn hàng nào.'}
+                  ? 'Hiện chưa có đơn hàng chờ nhận.'
+                  : 'Bạn chưa nhận đơn nào.'}
               </Text>
             </View>
           ) : (
             listToShow.map((ord) => (
               <View key={ord.orderCode} style={styles.card}>
                 <View style={styles.orderAdminHeader}>
-                  <Text style={styles.orderAdminCode}>Mã đơn: #{ord.orderCode}</Text>
+                  <Text style={styles.orderAdminCode}>#{ord.orderCode}</Text>
                   <Text style={styles.orderAdminStatus}>{ord.status}</Text>
                 </View>
 
                 <View style={styles.shipperRouteBox}>
                   <Text style={styles.routeLine}>
-                    🏪 <Text style={styles.boldText}>Lấy món tại:</Text>{' '}
-                    {ord.storeName || `Cửa hàng #${ord.store_id}`}
-                    {ord.storeAddress ? ` (${ord.storeAddress})` : ''}
+                    Lấy tại: <Text style={styles.boldText}>{ord.storeName || `Quán #${ord.store_id}`}</Text>
                   </Text>
-                  <Text style={[styles.routeLine, { marginTop: 6 }]}>
-                    📍 <Text style={styles.boldText}>Giao đến khách:</Text>{' '}
-                    {ord.customerName} ({ord.phone})
+                  <Text style={[styles.routeLine, { marginTop: 4 }]}>
+                    Giao tới: <Text style={styles.boldText}>{ord.customerName} ({ord.phone})</Text>
                   </Text>
                   <Text style={styles.routeAddr}>{ord.address}</Text>
                   {ord.note ? (
-                    <Text style={styles.routeNote}>📝 Ghi chú: {ord.note}</Text>
+                    <Text style={styles.routeNote}>Ghi chú: {ord.note}</Text>
                   ) : null}
                 </View>
 
                 <Text style={styles.orderAdminFinance}>
-                  💰 Cần thu khách:{' '}
+                  Thu khách:{' '}
                   {ord.paymentMethod?.includes('QR') ||
                   ord.paymentStatus?.includes('QR')
                     ? `0đ (${ord.paymentStatus})`
-                    : `${formatCurrency(ord.totalAmount)} (Thu tiền mặt COD)`}
+                    : `${formatCurrency(ord.totalAmount)} (Tiền mặt)`}
                 </Text>
 
                 {ord.status === 'Chờ tài xế nhận' && (
                   <TouchableOpacity
-                    style={[styles.saveBtn, { backgroundColor: '#1565C0', marginTop: 12 }]}
+                    style={[styles.saveBtn, { backgroundColor: '#1565C0', marginTop: 10 }]}
                     onPress={() => handleAcceptDelivery(ord.orderCode)}
                   >
-                    <Text style={styles.saveBtnText}>
-                      🛵 NHẬN GIAO ĐƠN HÀNG NÀY
-                    </Text>
+                    <Text style={styles.saveBtnText}>NHẬN GIAO ĐƠN NÀY</Text>
                   </TouchableOpacity>
                 )}
 
                 {ord.status === 'Đang giao hàng' &&
                   ord.shipper_username === currentUser.username && (
                     <TouchableOpacity
-                      style={[styles.saveBtn, { backgroundColor: '#2E7D32', marginTop: 12 }]}
+                      style={[styles.saveBtn, { backgroundColor: '#2E7D32', marginTop: 10 }]}
                       onPress={() => handleCompleteDelivery(ord.orderCode)}
                     >
-                      <Text style={styles.saveBtnText}>
-                        ✅ XÁC NHẬN ĐÃ GIAO HOÀN TẤT
-                      </Text>
+                      <Text style={styles.saveBtnText}>XÁC NHẬN ĐÃ GIAO XONG</Text>
                     </TouchableOpacity>
                   )}
               </View>
@@ -307,9 +289,6 @@ export default function AdminScreen({ navigation }) {  const {
     );
   }
 
-  // =========================================================
-  // HÀM XỬ LÝ DÀNH CHO VENDOR & ADMIN
-  // =========================================================
   const resetProductForm = () => {
     setEditingProdId(0);
     setProdName('');
@@ -364,10 +343,10 @@ export default function AdminScreen({ navigation }) {  const {
   };
 
   const handleVendorDeleteProduct = (id, name) => {
-    Alert.alert('Xác nhận xóa', `Bạn có chắc muốn xóa món "${name}" khỏi thực đơn quán?`, [
+    Alert.alert('Xóa món', `Xác nhận xóa món "${name}" khỏi thực đơn?`, [
       { text: 'Hủy', style: 'cancel' },
       {
-        text: 'Xóa món',
+        text: 'Xóa',
         style: 'destructive',
         onPress: async () => {
           const res = await deleteProduct(id);
@@ -377,7 +356,6 @@ export default function AdminScreen({ navigation }) {  const {
     ]);
   };
 
-  // Mở Modal cho Admin gửi Cảnh cáo hoặc Gỡ món vi phạm
   const openAdminActionModal = (productItem, mode) => {
     setWarnTargetProduct(productItem);
     setWarnMode(mode);
@@ -387,7 +365,7 @@ export default function AdminScreen({ navigation }) {  const {
 
   const handleConfirmAdminWarningOrDelete = async () => {
     if (!warnMessage.trim()) {
-      Alert.alert('Thiếu lý do', 'Vui lòng nhập nội dung cảnh cáo hoặc lý do vi phạm!');
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập lý do!');
       return;
     }
 
@@ -407,17 +385,13 @@ export default function AdminScreen({ navigation }) {  const {
       const res = await deleteProduct(warnTargetProduct.id, warnMessage.trim());
       setWarnModalVisible(false);
       if (res.success) {
-        Alert.alert(
-          'Đã gỡ sản phẩm vi phạm',
-          `Đã xóa món "${warnTargetProduct.name}" và gửi thông báo cảnh cáo tới cửa hàng!`
-        );
+        Alert.alert('Đã gỡ món', `Đã xóa món "${warnTargetProduct.name}".`);
       } else {
         Alert.alert('Lỗi', res.message);
       }
     }
   };
 
-  // Xử lý CRUD Voucher (Hỗ trợ cả Admin Sàn & Chủ Quán)
   const resetVoucherForm = () => {
     setEditingVoucherId(0);
     setVCode('');
@@ -442,13 +416,13 @@ export default function AdminScreen({ navigation }) {  const {
 
   const handleSaveVoucher = async () => {
     if (!vCode.trim() || !vTitle.trim() || !vValue.trim()) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng nhập Mã code, Tên chương trình và Giá trị giảm!');
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập Mã code, Mô tả và Mức giảm!');
       return;
     }
 
     const res = await saveVoucher({
       id: editingVoucherId,
-      store_id: isVendor ? vendorStoreId : null, // Vendor tạo mã cho quán mình, Admin tạo mã toàn sàn
+      store_id: isVendor ? vendorStoreId : null,
       code: vCode.trim().toUpperCase(),
       title: vTitle.trim(),
       type: vType,
@@ -467,7 +441,7 @@ export default function AdminScreen({ navigation }) {  const {
   };
 
   const handleDeleteVoucher = (id, code) => {
-    Alert.alert('Xóa mã giảm giá', `Bạn có chắc muốn xóa mã ${code}?`, [
+    Alert.alert('Xóa voucher', `Xác nhận xóa mã ${code}?`, [
       { text: 'Hủy', style: 'cancel' },
       {
         text: 'Xóa',
@@ -480,41 +454,35 @@ export default function AdminScreen({ navigation }) {  const {
     ]);
   };
 
-  const unresolvedWarningsCount = storeWarnings.filter((w) => !w.isResolved).length;
-
   return (
     <View style={styles.container}>
-      {/* BANNER VAI TRÒ QUẢN TRỊ */}
-      <View style={[styles.roleHeader, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-        <View style={{ flex: 1, paddingRight: 8 }}>
+      <View style={styles.roleHeader}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.roleHeaderTitle}>
             {isAdmin
-              ? '🛡️ BẢNG ĐIỀU KHIỂN QUẢN TRỊ VIÊN NỀN TẢNG (ADMIN)'
-              : `🏪 GIAN HÀNG: ${currentUser?.store?.storeName || 'Đối tác Vendor'}`}
+              ? 'BẢNG QUẢN TRỊ NỀN TẢNG'
+              : `GIAN HÀNG: ${currentUser?.store?.storeName || 'Cửa hàng'}`}
           </Text>
           <Text style={styles.roleHeaderSub}>
-            {isAdmin
-              ? 'Giám sát hoa hồng 10%, quản lý Voucher Toàn sàn & Kiểm duyệt/Cảnh cáo vi phạm'
-              : 'Chủ động quản lý Thực đơn, tạo Voucher riêng của quán & Gọi Shipper giao hàng'}
+            {isAdmin ? 'Giám sát chiết khấu 10% & duyệt thực đơn' : 'Quản lý thực đơn & điều phối đơn hàng'}
           </Text>
         </View>
 
         <TouchableOpacity
-          style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8 }}
+          style={styles.profileShortcutBtn}
           onPress={() => navigation.navigate('Profile')}
         >
-          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>👤 Hồ sơ</Text>
+          <Text style={styles.profileShortcutText}>Hồ sơ</Text>
         </TouchableOpacity>
       </View>
 
-      {/* THANH CHUYỂN 4 TAB (MỞ CHO CẢ ADMIN VÀ VENDOR) */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tabItem, activeTab === 'stats' && styles.tabItemActive]}
           onPress={() => setActiveTab('stats')}
         >
           <Text style={[styles.tabText, activeTab === 'stats' && styles.tabTextActive]}>
-            📊 Doanh thu
+            Doanh thu
           </Text>
         </TouchableOpacity>
 
@@ -523,7 +491,7 @@ export default function AdminScreen({ navigation }) {  const {
           onPress={() => setActiveTab('products')}
         >
           <Text style={[styles.tabText, activeTab === 'products' && styles.tabTextActive]}>
-            🧋 Thực đơn {unresolvedWarningsCount > 0 ? `(${unresolvedWarningsCount}⚠️)` : ''}
+            Thực đơn
           </Text>
         </TouchableOpacity>
 
@@ -532,7 +500,7 @@ export default function AdminScreen({ navigation }) {  const {
           onPress={() => setActiveTab('orders')}
         >
           <Text style={[styles.tabText, activeTab === 'orders' && styles.tabTextActive]}>
-            📦 Đơn ({managedOrders.length})
+            Đơn hàng ({managedOrders.length})
           </Text>
         </TouchableOpacity>
 
@@ -541,52 +509,50 @@ export default function AdminScreen({ navigation }) {  const {
           onPress={() => setActiveTab('vouchers')}
         >
           <Text style={[styles.tabText, activeTab === 'vouchers' && styles.tabTextActive]}>
-            🎟️ Voucher ({managedVouchers.length})
+            Voucher ({managedVouchers.length})
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* ====================================================
-            TAB 1: THỐNG KÊ DOANH THU, HOA HỒNG & ĐỘ PHỔ BIẾN
-        ==================================================== */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#D84315']} />
+        }
+      >
         {activeTab === 'stats' && (
           <View>
             <View style={styles.statsGrid}>
               <View style={[styles.statBox, { backgroundColor: '#E3F2FD' }]}>
-                <Text style={styles.statLabel}>Tổng giá trị đơn (GMV)</Text>
+                <Text style={styles.statLabel}>Tổng giá trị đơn</Text>
                 <Text style={[styles.statVal, { color: '#1565C0' }]}>
                   {formatCurrency(analytics.totalGMV)}
                 </Text>
                 <Text style={styles.statSub}>
-                  {analytics.totalOrdersCount} đơn ({analytics.completedCount} hoàn tất)
+                  {analytics.totalOrdersCount} đơn • {analytics.completedCount} hoàn tất
                 </Text>
               </View>
 
               <View style={[styles.statBox, { backgroundColor: '#FCE4EC' }]}>
                 <Text style={styles.statLabel}>
-                  {isAdmin ? 'Doanh thu Hoa hồng Sàn (10%)' : 'Phí chiết khấu nộp Sàn (10%)'}
+                  {isAdmin ? 'Phí hoa hồng sàn (10%)' : 'Phí chiết khấu nộp sàn (10%)'}
                 </Text>
                 <Text style={[styles.statVal, { color: '#C2185B' }]}>
                   {formatCurrency(analytics.totalPlatformFee)}
                 </Text>
-                <Text style={styles.statSub}>Trích tự động trên mỗi đơn</Text>
               </View>
 
               <View style={[styles.statBox, { backgroundColor: '#E8F5E9' }]}>
-                <Text style={styles.statLabel}>Doanh thu thực nhận của Quán (90%)</Text>
+                <Text style={styles.statLabel}>Doanh thu thực nhận của quán (90%)</Text>
                 <Text style={[styles.statVal, { color: '#2E7D32' }]}>
                   {formatCurrency(analytics.vendorNetRevenue)}
                 </Text>
-                <Text style={styles.statSub}>Sau khi trừ phí nền tảng</Text>
               </View>
             </View>
 
             {isAdmin && (
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>
-                  🏪 Báo cáo chiết khấu hoa hồng theo Cửa hàng đối tác
-                </Text>
+                <Text style={styles.sectionTitle}>Báo cáo theo cửa hàng</Text>
                 {stores.map((st) => {
                   const stOrders = orders.filter(
                     (o) => Number(o.store_id) === Number(st.id) && o.status !== 'Đã hủy'
@@ -599,15 +565,13 @@ export default function AdminScreen({ navigation }) {  const {
                   return (
                     <View key={st.id} style={styles.storeStatRow}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.storeStatName}>
-                          {st.storeName} (@{st.vendor_username})
-                        </Text>
+                        <Text style={styles.storeStatName}>{st.storeName}</Text>
                         <Text style={styles.storeStatSub}>
-                          Số đơn hợp lệ: {stOrders.length} đơn • Doanh số: {formatCurrency(stGMV)}
+                          {stOrders.length} đơn • Doanh số: {formatCurrency(stGMV)}
                         </Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={styles.storeFeeLabel}>Phí sàn thu (10%)</Text>
+                        <Text style={styles.storeFeeLabel}>Phí sàn (10%)</Text>
                         <Text style={styles.storeFeeValue}>+{formatCurrency(stFee)}</Text>
                       </View>
                     </View>
@@ -617,9 +581,7 @@ export default function AdminScreen({ navigation }) {  const {
             )}
 
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>
-                🏆 Thống kê tần suất mua & Độ phổ biến món nước
-              </Text>
+              <Text style={styles.sectionTitle}>Xếp hạng món bán chạy</Text>
               {analytics.popularityRanking.map((item, idx) => (
                 <View key={item.id} style={styles.rankRow}>
                   <View
@@ -634,41 +596,29 @@ export default function AdminScreen({ navigation }) {  const {
                   </View>
                   <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={styles.rankProdName}>{item.name}</Text>
-                    <Text style={styles.rankProdStore}>
-                      {item.storeName} • {item.category}
-                    </Text>
+                    <Text style={styles.rankProdStore}>{item.storeName}</Text>
                   </View>
-                  <Text style={styles.rankSoldCount}>{item.soldCount || 0} ly đã bán</Text>
+                  <Text style={styles.rankSoldCount}>{item.soldCount || 0} đã bán</Text>
                 </View>
               ))}
             </View>
           </View>
         )}
 
-        {/* ====================================================
-            TAB 2: QUẢN LÝ THỰC ĐƠN (VENDOR) & KIỂM DUYỆT VI PHẠM (ADMIN)
-        ==================================================== */}
         {activeTab === 'products' && (
           <View>
-            {/* HỘP THƯ CẢNH CÁO VI PHẠM TỪ ADMIN */}
             {storeWarnings.length > 0 && (
               <View style={[styles.card, { borderColor: '#FFB300', borderWidth: 1.5 }]}>
                 <Text style={[styles.sectionTitle, { color: '#D84315' }]}>
-                  🔔 Thông báo & Cảnh cáo vi phạm từ Quản trị viên ({storeWarnings.length})
+                  Thông báo cảnh cáo ({storeWarnings.length})
                 </Text>
                 {storeWarnings.map((w) => (
                   <View key={w.id} style={styles.warningItem}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.warningTitle}>
-                        ⚠️ Món: {w.product_name}{' '}
-                        {isAdmin ? `(${w.storeName})` : ''}
-                      </Text>
+                      <Text style={styles.warningTitle}>Món: {w.product_name}</Text>
                       <Text style={styles.warningMsg}>{w.message}</Text>
                       <Text style={styles.warningMeta}>
-                        Trạng thái:{' '}
-                        {w.isResolved
-                          ? '✅ Cửa hàng đã xác nhận khắc phục'
-                          : '🔴 Chưa xử lý'}
+                        {w.isResolved ? 'Đã khắc phục' : 'Chưa xử lý'}
                       </Text>
                     </View>
 
@@ -677,7 +627,7 @@ export default function AdminScreen({ navigation }) {  const {
                         style={styles.resolveBtn}
                         onPress={() => resolveStoreWarning(w.id)}
                       >
-                        <Text style={styles.resolveBtnText}>✅ Đã khắc phục</Text>
+                        <Text style={styles.resolveBtnText}>Đã sửa</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -685,19 +635,16 @@ export default function AdminScreen({ navigation }) {  const {
               </View>
             )}
 
-            {/* CHỈ VENDOR MỚI CÓ QUYỀN THÊM / SỬA THỰC ĐƠN */}
-            {isVendor ? (
+            {isVendor && (
               <View style={styles.card}>
                 <Text style={styles.sectionTitle}>
-                  {editingProdId > 0
-                    ? `✏️ Chỉnh sửa món #${editingProdId}`
-                    : '➕ Thêm món mới lên thực đơn quán'}
+                  {editingProdId > 0 ? `Sửa món #${editingProdId}` : 'Thêm món mới'}
                 </Text>
 
-                <Text style={styles.label}>Tên món đồ uống (*)</Text>
+                <Text style={styles.label}>Tên món</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="VD: Trà Sữa Oolong Kem Phô Mai"
+                  placeholder="Nhập tên món..."
                   value={prodName}
                   onChangeText={setProdName}
                 />
@@ -724,10 +671,10 @@ export default function AdminScreen({ navigation }) {  const {
 
                 <View style={styles.twoColRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Giá gốc (VNĐ) (*)</Text>
+                    <Text style={styles.label}>Giá gốc</Text>
                     <TextInput
                       style={styles.input}
-                      placeholder="VD: 45000"
+                      placeholder="45000"
                       keyboardType="numeric"
                       value={prodBasePrice}
                       onChangeText={setProdBasePrice}
@@ -735,10 +682,10 @@ export default function AdminScreen({ navigation }) {  const {
                   </View>
 
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Giá giảm khuyến mãi (0 = K giảm)</Text>
+                    <Text style={styles.label}>Giá khuyến mãi</Text>
                     <TextInput
                       style={styles.input}
-                      placeholder="VD: 35000"
+                      placeholder="0"
                       keyboardType="numeric"
                       value={prodDiscountPrice}
                       onChangeText={setProdDiscountPrice}
@@ -746,18 +693,18 @@ export default function AdminScreen({ navigation }) {  const {
                   </View>
                 </View>
 
-                <Text style={styles.label}>Đường dẫn Ảnh (URL)</Text>
+                <Text style={styles.label}>Link ảnh</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="https://..."
                   value={prodImage}
                   onChangeText={setProdImage}
                 />
 
-                <Text style={styles.label}>Mô tả hương vị</Text>
+                <Text style={styles.label}>Mô tả</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Nhập mô tả thành phần món nước..."
+                  placeholder="Mô tả món nước..."
                   value={prodDesc}
                   onChangeText={setProdDesc}
                 />
@@ -773,7 +720,7 @@ export default function AdminScreen({ navigation }) {  const {
                         prodBestSeller && { color: '#FFF' },
                       ]}
                     >
-                      {prodBestSeller ? '☑️ Món Nổi Bật (Best-seller)' : '⬜ Món Nổi Bật'}
+                      {prodBestSeller ? '☑️ Món nổi bật' : '⬜ Món nổi bật'}
                     </Text>
                   </TouchableOpacity>
 
@@ -793,7 +740,7 @@ export default function AdminScreen({ navigation }) {  const {
                         prodAvailable && { color: '#FFF' },
                       ]}
                     >
-                      {prodAvailable ? '🟢 Trạng thái: Còn món' : '🔴 Tạm hết hàng'}
+                      {prodAvailable ? 'Còn món' : 'Hết hàng'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -801,7 +748,7 @@ export default function AdminScreen({ navigation }) {  const {
                 <View style={styles.formActionRow}>
                   <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProduct}>
                     <Text style={styles.saveBtnText}>
-                      {editingProdId > 0 ? 'LƯU CẬP NHẬT MÓN' : '+ THÊM MÓN MỚI'}
+                      {editingProdId > 0 ? 'LƯU CẬP NHẬT' : 'THÊM MÓN'}
                     </Text>
                   </TouchableOpacity>
 
@@ -810,38 +757,27 @@ export default function AdminScreen({ navigation }) {  const {
                       style={styles.cancelEditBtn}
                       onPress={resetProductForm}
                     >
-                      <Text style={styles.cancelEditText}>Hủy sửa</Text>
+                      <Text style={styles.cancelEditText}>Hủy</Text>
                     </TouchableOpacity>
                   )}
                 </View>
               </View>
-            ) : (
-              <View style={styles.adminPolicyBanner}>
-                <Text style={styles.adminPolicyText}>
-                  🛡️ Chính sách Phân quyền Sàn: Quản trị viên nền tảng không can thiệp chỉnh sửa giá hay thông tin thực đơn của quán. Bạn chỉ có quyền Gửi cảnh cáo hoặc Gỡ sản phẩm nếu phát hiện vi phạm tiêu chuẩn cộng đồng.
-                </Text>
-              </View>
             )}
 
-            {/* Danh sách sản phẩm */}
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>
-                📋 Danh sách Thực đơn ({managedProducts.length} món)
+                Danh sách món ({managedProducts.length})
               </Text>
               {managedProducts.map((item) => (
                 <View key={item.id} style={styles.prodRow}>
                   <Image source={{ uri: item.image }} style={styles.prodThumb} />
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.prodRowStore}>🏪 {item.storeName}</Text>
+                    <Text style={styles.prodRowStore}>{item.storeName}</Text>
                     <Text style={styles.prodRowName}>{item.name}</Text>
                     <Text style={styles.prodRowPrice}>
-                      Giá gốc: {formatCurrency(item.basePrice)}
-                      {item.discountPrice > 0
-                        ? ` ➔ KM: ${formatCurrency(item.discountPrice)}`
-                        : ''}
+                      {formatCurrency(item.discountPrice > 0 ? item.discountPrice : item.basePrice)}
                     </Text>
 
-                    {/* Nút điều khiển: Phân tách rõ giữa Vendor và Admin */}
                     {isVendor ? (
                       <View style={styles.prodControlBtns}>
                         <TouchableOpacity
@@ -862,9 +798,7 @@ export default function AdminScreen({ navigation }) {  const {
                               color: item.isAvailable ? '#2E7D32' : '#C62828',
                             }}
                           >
-                            {item.isAvailable
-                              ? '🟢 Còn món (Bấm khóa)'
-                              : '🔴 Tạm hết (Bấm mở)'}
+                            {item.isAvailable ? 'Còn món' : 'Hết món'}
                           </Text>
                         </TouchableOpacity>
 
@@ -875,7 +809,7 @@ export default function AdminScreen({ navigation }) {  const {
                           <Text
                             style={{ fontSize: 11, fontWeight: 'bold', color: '#1565C0' }}
                           >
-                            ✏️ Sửa
+                            Sửa
                           </Text>
                         </TouchableOpacity>
 
@@ -886,7 +820,7 @@ export default function AdminScreen({ navigation }) {  const {
                           <Text
                             style={{ fontSize: 11, fontWeight: 'bold', color: '#C62828' }}
                           >
-                            🗑️ Xóa
+                            Xóa
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -899,7 +833,7 @@ export default function AdminScreen({ navigation }) {  const {
                           <Text
                             style={{ fontSize: 11, fontWeight: 'bold', color: '#E65100' }}
                           >
-                            ⚠️ Gửi cảnh cáo tới quán
+                            Cảnh cáo
                           </Text>
                         </TouchableOpacity>
 
@@ -910,7 +844,7 @@ export default function AdminScreen({ navigation }) {  const {
                           <Text
                             style={{ fontSize: 11, fontWeight: 'bold', color: '#C62828' }}
                           >
-                            🗑️ Gỡ món vi phạm
+                            Gỡ món
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -922,45 +856,37 @@ export default function AdminScreen({ navigation }) {  const {
           </View>
         )}
 
-        {/* ====================================================
-            TAB 3: XỬ LÝ ĐƠN HÀNG (PHỐI HỢP VENDOR -> SHIPPER)
-        ==================================================== */}
         {activeTab === 'orders' && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>
-              📦 Điều phối Đơn hàng ({managedOrders.length})
-            </Text>
-            <Text style={styles.subHintNote}>
-              * Quy trình chuẩn: Quán pha chế xong bấm "Gọi Shipper" ➔ Tài xế nhận đơn đi giao và bấm "Hoàn tất".
+              Danh sách đơn hàng ({managedOrders.length})
             </Text>
 
             {managedOrders.map((ord) => (
               <View key={ord.orderCode} style={styles.orderAdminItem}>
                 <View style={styles.orderAdminHeader}>
                   <Text style={styles.orderAdminCode}>
-                    #{ord.orderCode} • {ord.storeName || `Quán #${ord.store_id}`}
+                    #{ord.orderCode} • {ord.storeName}
                   </Text>
                   <Text style={styles.orderAdminStatus}>{ord.status}</Text>
                 </View>
 
                 <Text style={styles.orderAdminMeta}>
-                  👤 Khách: {ord.customerName} ({ord.phone})
+                  Khách: {ord.customerName} ({ord.phone})
                 </Text>
-                <Text style={styles.orderAdminMeta}>📍 Địa chỉ: {ord.address}</Text>
+                <Text style={styles.orderAdminMeta}>Địa chỉ: {ord.address}</Text>
                 <Text style={styles.orderAdminMeta}>
-                  💳 Thanh toán: {ord.paymentStatus || ord.paymentMethod}
+                  Thanh toán: {ord.paymentStatus || ord.paymentMethod}
                 </Text>
                 {ord.shipperName && (
                   <Text style={[styles.orderAdminMeta, { color: '#1565C0', fontWeight: 'bold' }]}>
-                    🛵 Tài xế giao đơn: {ord.shipperName} (@{ord.shipper_username})
+                    Tài xế: {ord.shipperName}
                   </Text>
                 )}
                 <Text style={styles.orderAdminFinance}>
-                  💰 Tổng đơn: {formatCurrency(ord.totalAmount)} (Phí sàn 10%:{' '}
-                  {formatCurrency(ord.platformFee || Math.round(ord.subTotal * 0.1))})
+                  Tổng đơn: {formatCurrency(ord.totalAmount)}
                 </Text>
 
-                {/* Thao tác của Chủ quán (Chỉ chuyển từ Đang chuẩn bị -> Chờ tài xế nhận) */}
                 {isVendor && ord.status === 'Đang chuẩn bị' && (
                   <View style={styles.vendorOrderActionRow}>
                     <TouchableOpacity
@@ -970,7 +896,7 @@ export default function AdminScreen({ navigation }) {  const {
                       }
                     >
                       <Text style={styles.saveBtnText}>
-                        📦 Đã xong món - Gọi Shipper nhận đơn
+                        Đã xong món • Gọi tài xế
                       </Text>
                     </TouchableOpacity>
 
@@ -978,53 +904,44 @@ export default function AdminScreen({ navigation }) {  const {
                       style={styles.cancelOrderSmallBtn}
                       onPress={() => updateOrderStatus(ord.orderCode, 'Đã hủy')}
                     >
-                      <Text style={styles.cancelOrderSmallText}>Hủy đơn</Text>
+                      <Text style={styles.cancelOrderSmallText}>Hủy</Text>
                     </TouchableOpacity>
                   </View>
-                )}
-
-                {isVendor && ord.status !== 'Đang chuẩn bị' && (
-                  <Text style={styles.lockedOrderHint}>
-                    ℹ️ Đơn hàng đang ở giai đoạn "{ord.status}" (Do bộ phận Tài xế Shipper phụ trách).
-                  </Text>
                 )}
               </View>
             ))}
           </View>
         )}
 
-        {/* ====================================================
-            TAB 4: QUẢN LÝ VOUCHER (TOÀN SÀN & RIÊNG CỦA QUÁN)
-        ==================================================== */}
         {activeTab === 'vouchers' && (
           <View>
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>
                 {editingVoucherId > 0
-                  ? `✏️ Sửa Mã giảm giá #${editingVoucherId}`
+                  ? `Sửa Voucher #${editingVoucherId}`
                   : isAdmin
-                  ? '🌐 Phát hành Mã giảm giá Toàn Sàn (Platform Voucher)'
-                  : `🏪 Tạo Mã giảm giá riêng cho quán ${currentUser?.store?.storeName}`}
+                  ? 'Tạo Voucher toàn sàn'
+                  : 'Tạo Voucher của quán'}
               </Text>
 
-              <Text style={styles.label}>Mã Code viết liền (*)</Text>
+              <Text style={styles.label}>Mã Voucher</Text>
               <TextInput
                 style={styles.input}
-                placeholder={isAdmin ? 'VD: SANFB20, FREESHIP' : 'VD: GONGCHA15, QUANMOI10'}
+                placeholder="VD: GIAM15K"
                 value={vCode}
                 onChangeText={setVCode}
                 autoCapitalize="characters"
               />
 
-              <Text style={styles.label}>Mô tả chương trình khuyến mãi (*)</Text>
+              <Text style={styles.label}>Mô tả chương trình</Text>
               <TextInput
                 style={styles.input}
-                placeholder="VD: Giảm 15.000đ cho đơn hàng từ 50.000đ"
+                placeholder="VD: Giảm 15.000đ cho đơn từ 50.000đ"
                 value={vTitle}
                 onChangeText={setVTitle}
               />
 
-              <Text style={styles.label}>Loại hình giảm giá</Text>
+              <Text style={styles.label}>Loại giảm</Text>
               <View style={styles.toggleRow}>
                 <TouchableOpacity
                   style={[styles.toggleBtn, vType === 'fixed' && styles.toggleBtnActive]}
@@ -1036,7 +953,7 @@ export default function AdminScreen({ navigation }) {  const {
                       vType === 'fixed' && { color: '#FFF' },
                     ]}
                   >
-                    💵 Giảm tiền cố định (fixed)
+                    Số tiền cố định
                   </Text>
                 </TouchableOpacity>
 
@@ -1050,7 +967,7 @@ export default function AdminScreen({ navigation }) {  const {
                       vType === 'percent' && { color: '#FFF' },
                     ]}
                   >
-                    ％ Giảm theo phần trăm (percent)
+                    Phần trăm (%)
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1058,11 +975,11 @@ export default function AdminScreen({ navigation }) {  const {
               <View style={styles.twoColRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.label}>
-                    {vType === 'fixed' ? 'Số tiền giảm (VNĐ)' : 'Phần trăm giảm (%)'}
+                    {vType === 'fixed' ? 'Số tiền giảm' : 'Phần trăm giảm'}
                   </Text>
                   <TextInput
                     style={styles.input}
-                    placeholder={vType === 'fixed' ? '15000' : '20'}
+                    placeholder={vType === 'fixed' ? '15000' : '15'}
                     keyboardType="numeric"
                     value={vValue}
                     onChangeText={setVValue}
@@ -1070,7 +987,7 @@ export default function AdminScreen({ navigation }) {  const {
                 </View>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>Đơn tối thiểu (minOrder)</Text>
+                  <Text style={styles.label}>Đơn tối thiểu</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="50000"
@@ -1081,34 +998,10 @@ export default function AdminScreen({ navigation }) {  const {
                 </View>
               </View>
 
-              <Text style={styles.label}>Mức giảm tối đa (VNĐ - Áp dụng cho mã %)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="25000"
-                keyboardType="numeric"
-                value={vMaxDiscount}
-                onChangeText={setVMaxDiscount}
-              />
-
-              <TouchableOpacity
-                style={[
-                  styles.toggleBtn,
-                  { marginTop: 10 },
-                  vActive && { backgroundColor: '#2E7D32', borderColor: '#2E7D32' },
-                ]}
-                onPress={() => setVActive(!vActive)}
-              >
-                <Text style={[styles.toggleBtnText, vActive && { color: '#FFF' }]}>
-                  {vActive
-                    ? '🟢 Trạng thái: Đang kích hoạt cho khách dùng'
-                    : '🔴 Trạng thái: Tạm ngưng mã này'}
-                </Text>
-              </TouchableOpacity>
-
               <View style={styles.formActionRow}>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleSaveVoucher}>
                   <Text style={styles.saveBtnText}>
-                    {editingVoucherId > 0 ? 'CẬP NHẬT VOUCHER' : '+ PHÁT HÀNH VOUCHER'}
+                    {editingVoucherId > 0 ? 'LƯU THAY ĐỔI' : 'PHÁT HÀNH VOUCHER'}
                   </Text>
                 </TouchableOpacity>
 
@@ -1117,7 +1010,7 @@ export default function AdminScreen({ navigation }) {  const {
                     style={styles.cancelEditBtn}
                     onPress={resetVoucherForm}
                   >
-                    <Text style={styles.cancelEditText}>Hủy sửa</Text>
+                    <Text style={styles.cancelEditText}>Hủy</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1125,22 +1018,17 @@ export default function AdminScreen({ navigation }) {  const {
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>
-                🏷️ Danh sách Mã giảm giá ({managedVouchers.length})
+                Danh sách mã ({managedVouchers.length})
               </Text>
               {managedVouchers.map((v) => (
                 <View key={v.id || v.code} style={styles.voucherRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.voucherScopeTag}>
-                      {v.store_id
-                        ? `🏪 Voucher Quán: ${v.storeName || '#' + v.store_id}`
-                        : '🌐 Voucher Toàn sàn (Admin)'}
+                      {v.store_id ? v.storeName : 'Toàn sàn'}
                     </Text>
-                    <Text style={styles.voucherRowCode}>
-                      {v.code} ({v.isActive ? '🟢 Đang mở' : '🔴 Đã khóa'})
-                    </Text>
+                    <Text style={styles.voucherRowCode}>{v.code}</Text>
                     <Text style={styles.voucherRowTitle}>{v.title}</Text>
                     <Text style={styles.voucherRowMeta}>
-                      Giảm: {v.type === 'fixed' ? formatCurrency(v.value) : `${v.value}%`} •
                       Đơn tối thiểu: {formatCurrency(v.minOrder)}
                     </Text>
                   </View>
@@ -1151,7 +1039,7 @@ export default function AdminScreen({ navigation }) {  const {
                       onPress={() => handleEditVoucherClick(v)}
                     >
                       <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#1565C0' }}>
-                        ✏️ Sửa
+                        Sửa
                       </Text>
                     </TouchableOpacity>
 
@@ -1160,7 +1048,7 @@ export default function AdminScreen({ navigation }) {  const {
                       onPress={() => handleDeleteVoucher(v.id, v.code)}
                     >
                       <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#C62828' }}>
-                        🗑️ Xóa
+                        Xóa
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1171,9 +1059,6 @@ export default function AdminScreen({ navigation }) {  const {
         )}
       </ScrollView>
 
-      {/* ============================================================
-          MODAL NHẬP LÝ DO CẢNH CÁO HOẶC GỠ MÓN VI PHẠM (CHO ADMIN)
-      ============================================================ */}
       <Modal
         visible={warnModalVisible}
         transparent
@@ -1183,18 +1068,15 @@ export default function AdminScreen({ navigation }) {  const {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
-              {warnMode === 'warn'
-                ? '⚠️ Gửi cảnh cáo vi phạm tới Cửa hàng'
-                : '🗑️ Gỡ sản phẩm vi phạm & Gửi cảnh cáo'}
+              {warnMode === 'warn' ? 'Gửi cảnh cáo quán' : 'Gỡ món vi phạm'}
             </Text>
             <Text style={styles.modalSub}>
-              Sản phẩm: <Text style={styles.boldText}>{warnTargetProduct?.name}</Text> (
-              {warnTargetProduct?.storeName})
+              Món: {warnTargetProduct?.name} ({warnTargetProduct?.storeName})
             </Text>
 
             <TextInput
               style={styles.modalInput}
-              placeholder="Nhập lý do cảnh cáo / vi phạm (VD: Hình ảnh không đúng thực tế, mô tả vi phạm...)"
+              placeholder="Nhập lý do cảnh cáo..."
               value={warnMessage}
               onChangeText={setWarnMessage}
               multiline
@@ -1216,7 +1098,7 @@ export default function AdminScreen({ navigation }) {  const {
                 onPress={handleConfirmAdminWarningOrDelete}
               >
                 <Text style={styles.modalConfirmText}>
-                  {warnMode === 'warn' ? 'Gửi cảnh cáo' : 'Xác nhận Gỡ món'}
+                  {warnMode === 'warn' ? 'Xác nhận' : 'Gỡ món'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1233,9 +1115,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#4A3222',
     paddingHorizontal: 14,
     paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   roleHeaderTitle: { color: '#FFD54F', fontSize: 13, fontWeight: 'bold' },
   roleHeaderSub: { color: '#EFEBE7', fontSize: 11, marginTop: 2 },
+  profileShortcutBtn: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  profileShortcutText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -1254,30 +1146,29 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#D84315', fontWeight: 'bold' },
   scrollContent: { padding: 14, paddingBottom: 40 },
   statsGrid: { gap: 10, marginBottom: 14 },
-  statBox: { padding: 14, borderRadius: 12 },
+  statBox: { padding: 12, borderRadius: 10 },
   statLabel: { fontSize: 12, fontWeight: 'bold', color: '#4E342E' },
-  statVal: { fontSize: 20, fontWeight: 'bold', marginTop: 4 },
+  statVal: { fontSize: 18, fontWeight: 'bold', marginTop: 4 },
   statSub: { fontSize: 11, color: '#616161', marginTop: 2 },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 14,
-    marginBottom: 14,
+    marginBottom: 12,
     elevation: 2,
   },
-  sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#3E2723', marginBottom: 10 },
-  subHintNote: { fontSize: 11, color: '#8D6E63', fontStyle: 'italic', marginBottom: 8 },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#3E2723', marginBottom: 10 },
   storeStatRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: '#F0EAE4',
   },
   storeStatName: { fontSize: 13, fontWeight: 'bold', color: '#3E2723' },
   storeStatSub: { fontSize: 11, color: '#757575', marginTop: 2 },
   storeFeeLabel: { fontSize: 10, color: '#8D6E63' },
-  storeFeeValue: { fontSize: 14, fontWeight: 'bold', color: '#C2185B' },
+  storeFeeValue: { fontSize: 13, fontWeight: 'bold', color: '#C2185B' },
   rankRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1286,9 +1177,9 @@ const styles = StyleSheet.create({
     borderTopColor: '#F5EFEA',
   },
   rankCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#EFEBE7',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1305,51 +1196,41 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
   },
-  warningTitle: { fontSize: 13, fontWeight: 'bold', color: '#E65100' },
+  warningTitle: { fontSize: 12, fontWeight: 'bold', color: '#E65100' },
   warningMsg: { fontSize: 12, color: '#3E2723', marginTop: 2 },
-  warningMeta: { fontSize: 11, color: '#757575', marginTop: 4 },
+  warningMeta: { fontSize: 10, color: '#757575', marginTop: 4 },
   resolveBtn: {
     backgroundColor: '#2E7D32',
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 6,
     marginLeft: 8,
   },
   resolveBtnText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
-  adminPolicyBanner: {
-    backgroundColor: '#E3F2FD',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#90CAF9',
-  },
-  adminPolicyText: { fontSize: 12, color: '#0D47A1', lineHeight: 18 },
-  label: { fontSize: 12, fontWeight: '600', color: '#4E342E', marginTop: 8, marginBottom: 4 },
+  label: { fontSize: 12, fontWeight: '600', color: '#4E342E', marginTop: 6, marginBottom: 2 },
   input: {
     backgroundColor: '#FAF7F5',
     borderWidth: 1,
     borderColor: '#E0D6CE',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
     fontSize: 13,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 4 },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
     backgroundColor: '#EFEBE7',
   },
   chipActive: { backgroundColor: '#6F4E37' },
   chipText: { fontSize: 12, fontWeight: '600', color: '#4E342E' },
   twoColRow: { flexDirection: 'row', gap: 10 },
-  toggleRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  toggleRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   toggleBtn: {
     flex: 1,
-    paddingVertical: 9,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#D7CCC8',
@@ -1357,13 +1238,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF7F5',
   },
   toggleBtnActive: { backgroundColor: '#6F4E37', borderColor: '#6F4E37' },
-  toggleBtnText: { fontSize: 11, fontWeight: 'bold', color: '#4E342E', textAlign: 'center' },
-  formActionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  toggleBtnText: { fontSize: 11, fontWeight: 'bold', color: '#4E342E' },
+  formActionRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   saveBtn: {
     flex: 1,
     backgroundColor: '#D84315',
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
     alignItems: 'center',
   },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
@@ -1371,7 +1252,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFEBE7',
     paddingHorizontal: 16,
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: 8,
   },
   cancelEditText: { color: '#4E342E', fontWeight: 'bold', fontSize: 12 },
   prodRow: {
@@ -1380,70 +1261,64 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F0EAE4',
   },
-  prodThumb: { width: 64, height: 64, borderRadius: 8 },
+  prodThumb: { width: 56, height: 56, borderRadius: 8 },
   prodRowStore: { fontSize: 10, color: '#8D6E63', fontWeight: 'bold' },
-  prodRowName: { fontSize: 14, fontWeight: 'bold', color: '#3E2723' },
+  prodRowName: { fontSize: 13, fontWeight: 'bold', color: '#3E2723' },
   prodRowPrice: { fontSize: 12, color: '#D84315', fontWeight: '600', marginTop: 2 },
   prodControlBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  miniBtn: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 6 },
+  miniBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   orderAdminItem: {
     borderTopWidth: 1,
     borderTopColor: '#EFEBE7',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   orderAdminHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 4,
   },
-  orderAdminCode: { fontSize: 14, fontWeight: 'bold', color: '#3E2723' },
+  orderAdminCode: { fontSize: 13, fontWeight: 'bold', color: '#3E2723' },
   orderAdminStatus: { fontSize: 12, fontWeight: 'bold', color: '#D84315' },
   orderAdminMeta: { fontSize: 12, color: '#5D4037', marginTop: 2 },
   orderAdminFinance: {
     fontSize: 12,
     fontWeight: 'bold',
     color: '#2E7D32',
-    marginTop: 6,
+    marginTop: 4,
   },
-  vendorOrderActionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  vendorOrderActionRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   cancelOrderSmallBtn: {
     backgroundColor: '#FFEBEE',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#FFCDD2',
   },
   cancelOrderSmallText: { color: '#C62828', fontWeight: 'bold', fontSize: 12 },
-  lockedOrderHint: {
-    fontSize: 11,
-    color: '#757575',
-    fontStyle: 'italic',
-    marginTop: 6,
-  },
   shipperRouteBox: {
     backgroundColor: '#FAF7F5',
-    padding: 10,
+    padding: 8,
     borderRadius: 8,
     marginVertical: 6,
     borderWidth: 1,
     borderColor: '#EFEBE7',
   },
-  routeLine: { fontSize: 13, color: '#3E2723' },
-  routeAddr: { fontSize: 12, color: '#5D4037', marginLeft: 20, marginTop: 2 },
-  routeNote: { fontSize: 12, color: '#D84315', marginLeft: 20, marginTop: 4 },
+  routeLine: { fontSize: 12, color: '#3E2723' },
+  routeAddr: { fontSize: 11, color: '#5D4037', marginLeft: 16, marginTop: 2 },
+  routeNote: { fontSize: 11, color: '#D84315', marginLeft: 16, marginTop: 2 },
   boldText: { fontWeight: 'bold' },
   voucherRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: '#EFEBE7',
   },
   voucherScopeTag: { fontSize: 10, fontWeight: 'bold', color: '#6A1B9A' },
-  voucherRowCode: { fontSize: 14, fontWeight: 'bold', color: '#E65100', marginTop: 2 },
-  voucherRowTitle: { fontSize: 12, color: '#3E2723', marginTop: 2 },
+  voucherRowCode: { fontSize: 13, fontWeight: 'bold', color: '#E65100', marginTop: 1 },
+  voucherRowTitle: { fontSize: 12, color: '#3E2723', marginTop: 1 },
   voucherRowMeta: { fontSize: 11, color: '#757575', marginTop: 2 },
   modalOverlay: {
     flex: 1,
@@ -1455,39 +1330,39 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 18,
+    borderRadius: 12,
+    padding: 16,
   },
-  modalTitle: { fontSize: 16, fontWeight: 'bold', color: '#3E2723' },
-  modalSub: { fontSize: 12, color: '#616161', marginTop: 4, marginBottom: 12 },
+  modalTitle: { fontSize: 15, fontWeight: 'bold', color: '#3E2723' },
+  modalSub: { fontSize: 12, color: '#616161', marginTop: 2, marginBottom: 10 },
   modalInput: {
     backgroundColor: '#FAF7F5',
     borderWidth: 1,
     borderColor: '#D7CCC8',
     borderRadius: 8,
-    padding: 10,
-    minHeight: 80,
+    padding: 8,
+    minHeight: 70,
     textAlignVertical: 'top',
     fontSize: 13,
   },
   modalActionRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 14,
+    gap: 8,
+    marginTop: 12,
   },
   modalCancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: '#EFEBE7',
   },
-  modalCancelText: { color: '#4E342E', fontWeight: 'bold', fontSize: 13 },
+  modalCancelText: { color: '#4E342E', fontWeight: 'bold', fontSize: 12 },
   modalConfirmBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: '#E65100',
   },
-  modalConfirmText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  modalConfirmText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
 });

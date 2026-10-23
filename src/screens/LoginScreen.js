@@ -99,14 +99,14 @@ export default function LoginScreen({ navigation, route }) {
           </TouchableOpacity>
 
           <View style={styles.demoSection}>
-            <Text style={styles.demoTitle}>⚡ Chọn nhanh 4 tài khoản Demo thuyết trình:</Text>
+            <Text style={styles.demoTitle}>Test nhanh: Chọn tài khoản có sẵn</Text>
             <View style={styles.demoRow}>
               <TouchableOpacity
                 style={[styles.demoBadge, { backgroundColor: '#E8F5E9' }]}
                 onPress={() => fillDemoAccount('khach1', '123456')}
               >
                 <Text style={[styles.demoBadgeText, { color: '#2E7D32' }]}>
-                  👤 Khách (khach1)
+                  👤 Khách
                 </Text>
               </TouchableOpacity>
 
@@ -115,7 +115,7 @@ export default function LoginScreen({ navigation, route }) {
                 onPress={() => fillDemoAccount('vendor1', '123456')}
               >
                 <Text style={[styles.demoBadgeText, { color: '#EF6C00' }]}>
-                  🏪 Quán (vendor1)
+                  🏪 Quán
                 </Text>
               </TouchableOpacity>
 
@@ -124,7 +124,7 @@ export default function LoginScreen({ navigation, route }) {
                 onPress={() => fillDemoAccount('shipper1', '123456')}
               >
                 <Text style={[styles.demoBadgeText, { color: '#1565C0' }]}>
-                  🛵 Tài xế (shipper1)
+                  🛵 Tài xế
                 </Text>
               </TouchableOpacity>
 
@@ -133,7 +133,7 @@ export default function LoginScreen({ navigation, route }) {
                 onPress={() => fillDemoAccount('admin', '123456')}
               >
                 <Text style={[styles.demoBadgeText, { color: '#C2185B' }]}>
-                  🛡️ Admin (admin)
+                  🛡️ Admin
                 </Text>
               </TouchableOpacity>
             </View>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { SIZES, SUGAR_LEVELS, ICE_LEVELS, TOPPINGS } from '../constants/data';
@@ -26,42 +27,45 @@ export default function ProductDetailScreen({ route, navigation }) {
     addToCart,
     getEligibleOrderForReview,
     addReview,
+    fetchAllData,
   } = useApp();
 
   const isCustomerOrGuest = !currentUser || currentUser.role === 'customer';
 
-  // Đồng bộ dữ liệu mới nhất của sản phẩm từ Context (cập nhật điểm sao ngay sau khi đánh giá)
   const product = useMemo(() => {
     return products.find((p) => Number(p.id) === Number(initialProduct.id)) || initialProduct;
   }, [products, initialProduct]);
 
-  const [selectedSize, setSelectedSize] = useState(SIZES[0]); // Mặc định Size S
+  const [selectedSize, setSelectedSize] = useState(SIZES[0]);
   const [selectedSugar, setSelectedSugar] = useState('100%');
   const [selectedIce, setSelectedIce] = useState('100% đá');
   const [selectedToppings, setSelectedToppings] = useState([]);
   const [quantity, setQuantity] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // State cho phần Đánh giá sản phẩm (Verified Review)
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchAllData();
+    setRefreshing(false);
+  }, [fetchAllData]);
 
   const isFav = favorites.includes(product.id);
   const hasDiscount =
     product.discountPrice > 0 && product.discountPrice < product.basePrice;
   const effectiveBasePrice = hasDiscount ? product.discountPrice : product.basePrice;
 
-  // Kiểm tra mã đơn hàng đủ điều kiện đánh giá (Verified Purchase)
   const eligibleOrderCode = useMemo(() => {
     return passedOrderCode || getEligibleOrderForReview(product.id);
-  }, [passedOrderCode, product.id, reviews]);
+  }, [passedOrderCode, product.id, reviews, getEligibleOrderForReview]);
 
-  // Lọc danh sách đánh giá của riêng sản phẩm này
   const productReviews = useMemo(() => {
     return reviews.filter((r) => Number(r.product_id) === Number(product.id));
   }, [reviews, product.id]);
 
-  // Chọn / Bỏ chọn nhiều Topping
   const handleToggleTopping = (topping) => {
     const exists = selectedToppings.some((t) => t.id === topping.id);
     if (exists) {
@@ -71,19 +75,17 @@ export default function ProductDetailScreen({ route, navigation }) {
     }
   };
 
-  // Tính đơn giá 1 ly (Giá gốc/khuyến mãi + Giá Size + Tổng tiền Topping)
   const unitPrice = useMemo(() => {
     const toppingsCost = selectedToppings.reduce((sum, t) => sum + t.price, 0);
     return effectiveBasePrice + selectedSize.price + toppingsCost;
   }, [effectiveBasePrice, selectedSize, selectedToppings]);
 
   const totalPrice = unitPrice * quantity;
-
   const formatCurrency = (val) => `${Number(val || 0).toLocaleString('vi-VN')}đ`;
 
   const handleAddToCart = () => {
     if (!product.isAvailable) {
-      Alert.alert('Tạm hết hàng', 'Món nước này hiện đang tạm ngưng phục vụ tại quán!');
+      Alert.alert('Thông báo', 'Món này hiện đang tạm ngưng phục vụ!');
       return;
     }
 
@@ -102,8 +104,8 @@ export default function ProductDetailScreen({ route, navigation }) {
       totalPrice,
     });
 
-    Alert.alert('Đã thêm vào giỏ!', `Đã thêm ${quantity}x ${product.name} vào giỏ hàng.`, [
-      { text: 'Tiếp tục chọn món', style: 'cancel' },
+    Alert.alert('Thành công', `Đã thêm ${quantity}x ${product.name} vào giỏ hàng.`, [
+      { text: 'Chọn tiếp', style: 'cancel' },
       { text: 'Xem giỏ hàng', onPress: () => navigation.navigate('Cart') },
     ]);
   };
@@ -111,8 +113,8 @@ export default function ProductDetailScreen({ route, navigation }) {
   const handleSubmitReview = async () => {
     if (!eligibleOrderCode) {
       Alert.alert(
-        'Chưa đủ điều kiện',
-        'Bạn chỉ có thể đánh giá sau khi đã mua món này và đơn hàng ở trạng thái Hoàn tất.'
+        'Thông báo',
+        'Bạn chỉ có thể đánh giá sau khi đơn hàng đã ở trạng thái Hoàn tất.'
       );
       return;
     }
@@ -134,33 +136,35 @@ export default function ProductDetailScreen({ route, navigation }) {
       setComment('');
       Alert.alert('Thành công', res.message);
     } else {
-      Alert.alert('Thông báo', res.message);
+      Alert.alert('Lỗi', res.message);
     }
   };
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* HÌNH ẢNH & THÔNG TIN CƠ BẢN */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6F4E37']} />
+        }
+      >
         <View style={styles.imageContainer}>
           <Image source={{ uri: product.image }} style={styles.mainImage} />
           <TouchableOpacity
             style={styles.favFloatingBtn}
             onPress={() => toggleFavorite(product.id)}
           >
-            <Text style={{ fontSize: 22 }}>{isFav ? '❤️' : '🤍'}</Text>
+            <Text style={{ fontSize: 20 }}>{isFav ? '❤️' : '🤍'}</Text>
           </TouchableOpacity>
           {!product.isAvailable && (
             <View style={styles.unavailableBanner}>
-              <Text style={styles.unavailableBannerText}>
-                CỬA HÀNG TẠM NGƯNG PHỤC VỤ MÓN NÀY
-              </Text>
+              <Text style={styles.unavailableBannerText}>TẠM HẾT HÀNG</Text>
             </View>
           )}
         </View>
 
         <View style={styles.infoCard}>
-          <Text style={styles.storeBadge}>🏪 {product.storeName || 'Cửa hàng đối tác'}</Text>
+          <Text style={styles.storeBadge}>{product.storeName || 'Cửa hàng đối tác'}</Text>
           <Text style={styles.productTitle}>{product.name}</Text>
 
           <View style={styles.priceRatingRow}>
@@ -171,19 +175,17 @@ export default function ProductDetailScreen({ route, navigation }) {
               )}
             </View>
             <Text style={styles.ratingSummary}>
-              ⭐ {product.avgRating || '5.0'} ({productReviews.length} đánh giá) • Đã bán{' '}
-              {product.soldCount || 0}
+              ⭐ {product.avgRating || '5.0'} • Đã bán {product.soldCount || 0}
             </Text>
           </View>
 
           <Text style={styles.descriptionText}>
-            {product.description || 'Hương vị thơm ngon đậm đà pha chế từ nguyên liệu tươi mới mỗi ngày.'}
+            {product.description || 'Pha chế tươi mới theo yêu cầu.'}
           </Text>
         </View>
 
-        {/* TÙY CHỈNH SIZE */}
         <View style={styles.optionSection}>
-          <Text style={styles.sectionTitle}>1. Chọn Kích cỡ (Size)</Text>
+          <Text style={styles.sectionTitle}>Kích cỡ</Text>
           <View style={styles.optionWrap}>
             {SIZES.map((sz) => {
               const active = selectedSize.id === sz.id;
@@ -202,9 +204,8 @@ export default function ProductDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* TÙY CHỈNH MỨC ĐƯỜNG */}
         <View style={styles.optionSection}>
-          <Text style={styles.sectionTitle}>2. Mức đường</Text>
+          <Text style={styles.sectionTitle}>Mức đường</Text>
           <View style={styles.optionWrap}>
             {SUGAR_LEVELS.map((sg) => {
               const active = selectedSugar === sg;
@@ -223,9 +224,8 @@ export default function ProductDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* TÙY CHỈNH MỨC ĐÁ */}
         <View style={styles.optionSection}>
-          <Text style={styles.sectionTitle}>3. Mức đá</Text>
+          <Text style={styles.sectionTitle}>Mức đá</Text>
           <View style={styles.optionWrap}>
             {ICE_LEVELS.map((ic) => {
               const active = selectedIce === ic;
@@ -244,9 +244,8 @@ export default function ProductDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* TÙY CHỈNH TOPPING */}
         <View style={styles.optionSection}>
-          <Text style={styles.sectionTitle}>4. Thêm Topping (Chọn nhiều)</Text>
+          <Text style={styles.sectionTitle}>Topping</Text>
           {TOPPINGS.map((tp) => {
             const isChecked = selectedToppings.some((t) => t.id === tp.id);
             return (
@@ -264,17 +263,15 @@ export default function ProductDetailScreen({ route, navigation }) {
           })}
         </View>
 
-        {/* KHU VỰC ĐÁNH GIÁ SẢN PHẨM (VERIFIED REVIEWS) */}
         <View style={styles.optionSection}>
           <Text style={styles.sectionTitle}>
-            💬 Đánh giá từ khách đã mua ({productReviews.length})
+            Đánh giá ({productReviews.length})
           </Text>
 
-          {/* Form gửi đánh giá chỉ mở khi khách có đơn Hoàn tất chứa món này */}
           {eligibleOrderCode ? (
             <View style={styles.reviewFormBox}>
               <Text style={styles.verifiedBadge}>
-                ✅ Đã xác thực mua hàng (Đơn #{eligibleOrderCode}) - Mời bạn đánh giá:
+                Đơn hàng #{eligibleOrderCode} • Cảm nhận của bạn:
               </Text>
               <View style={styles.starSelectRow}>
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -287,7 +284,7 @@ export default function ProductDetailScreen({ route, navigation }) {
 
               <TextInput
                 style={styles.reviewInput}
-                placeholder="Chia sẻ hương vị món nước, độ ngọt, chất lượng đóng gói..."
+                placeholder="Hương vị, độ ngọt, chất lượng đóng gói..."
                 value={comment}
                 onChangeText={setComment}
                 multiline
@@ -308,7 +305,7 @@ export default function ProductDetailScreen({ route, navigation }) {
           ) : (
             <View style={styles.reviewLockedNotice}>
               <Text style={styles.reviewLockedText}>
-                🔒 Chỉ khách hàng đã đặt mua món này và đơn hàng ở trạng thái "Hoàn tất" mới có thể gửi đánh giá (Verified Review).
+                Chỉ khách hàng có đơn hàng đã giao hoàn tất mới có thể gửi đánh giá.
               </Text>
             </View>
           )}
@@ -321,14 +318,14 @@ export default function ProductDetailScreen({ route, navigation }) {
             productReviews.map((rev) => (
               <View key={rev.id} style={styles.reviewItem}>
                 <View style={styles.reviewHeader}>
-                  <Text style={styles.reviewerName}>👤 {rev.fullName || rev.username}</Text>
+                  <Text style={styles.reviewerName}>{rev.fullName || rev.username}</Text>
                   <Text style={styles.reviewStars}>
                     {'⭐'.repeat(Number(rev.rating || 5))}
                   </Text>
                 </View> 
                 <Text style={styles.reviewComment}>{rev.comment}</Text>
                 <Text style={styles.reviewMeta}>
-                  Đơn hàng #{rev.orderCode} • {rev.createdAt || 'Đã mua hàng'}
+                  Đơn #{rev.orderCode} • {rev.createdAt || 'Đã mua'}
                 </Text>
               </View>
             ))
@@ -336,7 +333,6 @@ export default function ProductDetailScreen({ route, navigation }) {
         </View>
       </ScrollView>
 
-      {/* THANH CÔNG CỤ ĐẶT MÓN CỐ ĐỊNH BÊN DƯỚI */}
       {isCustomerOrGuest ? (
         <View style={styles.bottomBar}>
           <View style={styles.qtyControl}>
@@ -370,7 +366,7 @@ export default function ProductDetailScreen({ route, navigation }) {
       ) : (
         <View style={[styles.bottomBar, { justifyContent: 'center', backgroundColor: '#EFEBE7' }]}>
           <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#5D4037' }}>
-            👁️ Chế độ xem thông tin & đánh giá dành cho {currentUser.role.toUpperCase()} (Không đặt hàng)
+            Chế độ xem dành cho {currentUser.role.toUpperCase()}
           </Text>
         </View>
       )}
@@ -382,18 +378,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F7F3F0' },
   scrollContent: { paddingBottom: 100 },
   imageContainer: { position: 'relative' },
-  mainImage: { width: '100%', height: 250 },
+  mainImage: { width: '100%', height: 240 },
   favFloatingBtn: {
     position: 'absolute',
     top: 14,
     right: 14,
     backgroundColor: 'rgba(255,255,255,0.9)',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
+    elevation: 3,
   },
   unavailableBanner: {
     position: 'absolute',
@@ -401,10 +397,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'rgba(183, 28, 28, 0.9)',
-    paddingVertical: 8,
+    paddingVertical: 6,
     alignItems: 'center',
   },
-  unavailableBannerText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  unavailableBannerText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
   infoCard: {
     backgroundColor: '#FFFFFF',
     padding: 16,
@@ -412,7 +408,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#EAE0D5',
   },
   storeBadge: { fontSize: 12, fontWeight: 'bold', color: '#8D6E63', marginBottom: 4 },
-  productTitle: { fontSize: 20, fontWeight: 'bold', color: '#3E2723' },
+  productTitle: { fontSize: 19, fontWeight: 'bold', color: '#3E2723' },
   priceRatingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -420,25 +416,25 @@ const styles = StyleSheet.create({
     marginTop: 8,
     flexWrap: 'wrap',
   },
-  mainPrice: { fontSize: 20, fontWeight: 'bold', color: '#D84315' },
+  mainPrice: { fontSize: 19, fontWeight: 'bold', color: '#D84315' },
   strikePrice: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#9E9E9E',
     textDecorationLine: 'line-through',
   },
   ratingSummary: { fontSize: 12, color: '#616161', fontWeight: '600' },
-  descriptionText: { fontSize: 13, color: '#5D4037', marginTop: 10, lineHeight: 19 },
+  descriptionText: { fontSize: 13, color: '#5D4037', marginTop: 8, lineHeight: 18 },
   optionSection: {
     backgroundColor: '#FFFFFF',
     marginTop: 10,
     padding: 16,
   },
-  sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#4A3222', marginBottom: 10 },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#4A3222', marginBottom: 10 },
   optionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#D7CCC8',
     backgroundColor: '#FAF7F5',
@@ -450,9 +446,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#EFEBE7',
     marginBottom: 8,
@@ -462,27 +458,27 @@ const styles = StyleSheet.create({
     borderColor: '#6F4E37',
     backgroundColor: '#FFF8F0',
   },
-  toppingName: { fontSize: 14, color: '#3E2723', fontWeight: '500' },
+  toppingName: { fontSize: 13, color: '#3E2723', fontWeight: '500' },
   toppingPrice: { fontSize: 13, fontWeight: 'bold', color: '#D84315' },
   reviewFormBox: {
     backgroundColor: '#FFF8F0',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#FFE0B2',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   verifiedBadge: { fontSize: 12, fontWeight: 'bold', color: '#2E7D32', marginBottom: 8 },
-  starSelectRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  starIcon: { fontSize: 24 },
-  ratingNumberText: { fontSize: 13, fontWeight: 'bold', color: '#6F4E37', marginLeft: 6 },
+  starSelectRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  starIcon: { fontSize: 22 },
+  ratingNumberText: { fontSize: 12, fontWeight: 'bold', color: '#6F4E37', marginLeft: 6 },
   reviewInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#D7CCC8',
     borderRadius: 8,
     padding: 10,
-    minHeight: 65,
+    minHeight: 60,
     textAlignVertical: 'top',
     fontSize: 13,
   },
@@ -493,12 +489,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
-  submitReviewBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  submitReviewBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
   reviewLockedNotice: {
     backgroundColor: '#F5F5F5',
     padding: 10,
     borderRadius: 8,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   reviewLockedText: { fontSize: 12, color: '#616161', fontStyle: 'italic' },
   noReviewText: { fontSize: 13, color: '#8D6E63', textAlign: 'center', paddingVertical: 10 },
@@ -513,7 +509,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   reviewerName: { fontSize: 13, fontWeight: 'bold', color: '#3E2723' },
-  reviewStars: { fontSize: 12 },
+  reviewStars: { fontSize: 11 },
   reviewComment: { fontSize: 13, color: '#4E342E', marginTop: 4 },
   reviewMeta: { fontSize: 11, color: '#9E9E9E', marginTop: 4 },
   bottomBar: {
@@ -528,26 +524,26 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#E0D6CE',
-    elevation: 10,
+    elevation: 8,
   },
   qtyControl: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#D7CCC8',
-    borderRadius: 10,
+    borderRadius: 8,
     marginRight: 12,
   },
   qtyBtn: { paddingHorizontal: 12, paddingVertical: 6 },
   qtyBtnText: { fontSize: 18, fontWeight: 'bold', color: '#6F4E37' },
-  qtyValue: { fontSize: 15, fontWeight: 'bold', paddingHorizontal: 8, color: '#3E2723' },
+  qtyValue: { fontSize: 14, fontWeight: 'bold', paddingHorizontal: 8, color: '#3E2723' },
   addCartBtn: {
     flex: 1,
     backgroundColor: '#D84315',
-    paddingVertical: 13,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 8,
     alignItems: 'center',
   },
   addCartBtnDisabled: { backgroundColor: '#9E9E9E' },
-  addCartBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
+  addCartBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
 });

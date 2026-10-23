@@ -26,7 +26,6 @@ export default function HomeScreen({ navigation }) {
     fetchAllData,
   } = useApp();
 
-  // Xác định người dùng có phải là Khách mua hàng (hoặc Khách vãng lai) hay không
   const isCustomerOrGuest = !currentUser || currentUser.role === 'customer';
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,9 +70,9 @@ export default function HomeScreen({ navigation }) {
 
   const getWorkspaceButtonLabel = () => {
     if (!currentUser) return '';
-    if (currentUser.role === 'shipper') return '🛵 Sàn Ship';
-    if (currentUser.role === 'vendor') return '🏪 Quản lý Quán';
-    return '🛡️ Quản trị Sàn';
+    if (currentUser.role === 'shipper') return '🛵 Giao hàng';
+    if (currentUser.role === 'vendor') return '🏪 Quản lý quán';
+    return '🛡️ Quản trị sàn';
   };
 
   const renderProductCard = ({ item }) => {
@@ -98,7 +97,7 @@ export default function HomeScreen({ navigation }) {
           )}
           {!item.isAvailable && (
             <View style={styles.outOfStockOverlay}>
-              <Text style={styles.outOfStockText}>TẠM HẾT HÀNG</Text>
+              <Text style={styles.outOfStockText}>TẠM HẾT</Text>
             </View>
           )}
         </View>
@@ -106,9 +105,8 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.productInfo}>
           <View style={styles.storeRow}>
             <Text style={styles.storeTag} numberOfLines={1}>
-              🏪 {item.storeName || 'Cửa hàng đối tác'}
+              {item.storeName || 'Cửa hàng đối tác'}
             </Text>
-            {/* Chỉ Khách hàng mới có nút thả tim Yêu thích */}
             {isCustomerOrGuest && (
               <TouchableOpacity onPress={() => toggleFavorite(item.id)}>
                 <Text style={styles.favIcon}>{isFav ? '❤️' : '🤍'}</Text>
@@ -121,7 +119,7 @@ export default function HomeScreen({ navigation }) {
           </Text>
 
           <Text style={styles.metaText}>
-            ⭐ {item.avgRating || '5.0'} ({item.reviewCount || 0}) • Đã bán {item.soldCount || 0}
+            ⭐ {item.avgRating || '5.0'} • Đã bán {item.soldCount || 0}
           </Text>
 
           <View style={styles.priceRow}>
@@ -140,11 +138,7 @@ export default function HomeScreen({ navigation }) {
               ]}
             >
               <Text style={styles.addMiniBtnText}>
-                {!isCustomerOrGuest
-                  ? '👁️ Xem'
-                  : item.isAvailable
-                  ? '+ Chọn'
-                  : 'Hết'}
+                {!isCustomerOrGuest ? 'Xem' : item.isAvailable ? '+ Chọn' : 'Hết'}
               </Text>
             </View>
           </View>
@@ -155,27 +149,25 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* HEADER PHÂN TÁCH RÕ LUỒNG KHÁCH HÀNG VÀ LUỒNG VẬN HÀNH */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>🧋 Sàn F&B Trà Sữa & Cà Phê</Text>
+          <Text style={styles.headerTitle}>Trà Sữa & Cà Phê</Text>
           <Text style={styles.headerSubtitle}>
             {currentUser
-              ? `${currentUser.fullName} • Vai trò: ${currentUser.role.toUpperCase()}`
-              : 'Khách vãng lai • Đăng nhập để nhận ưu đãi'}
+              ? `${currentUser.fullName} • ${currentUser.role.toUpperCase()}`
+              : 'Đăng nhập để nhận ưu đãi'}
           </Text>
         </View>
 
         <View style={styles.headerActions}>
           {isCustomerOrGuest ? (
             <>
-              {/* Giao diện Header dành riêng cho Khách hàng */}
               {currentUser && (
                 <TouchableOpacity
                   style={styles.headerBtn}
                   onPress={() => navigation.navigate('OrderHistory')}
                 >
-                  <Text style={styles.headerBtnText}>📦 Đơn của tôi</Text>
+                  <Text style={styles.headerBtnText}>📦 Đơn mua</Text>
                 </TouchableOpacity>
               )}
 
@@ -186,7 +178,7 @@ export default function HomeScreen({ navigation }) {
                 }
               >
                 <Text style={styles.headerBtnText}>
-                  {currentUser ? '👤 Hồ sơ' : '🔑 Đăng nhập'}
+                  {currentUser ? '👤 Hồ sơ' : 'Đăng nhập'}
                 </Text>
               </TouchableOpacity>
 
@@ -199,7 +191,6 @@ export default function HomeScreen({ navigation }) {
             </>
           ) : (
             <>
-              {/* Giao diện Header dành riêng cho Admin / Vendor / Shipper (Không có Đơn & Giỏ hàng) */}
               <TouchableOpacity
                 style={[styles.headerBtn, { backgroundColor: '#FFD54F' }]}
                 onPress={() => navigation.navigate('Admin')}
@@ -220,23 +211,21 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Banner nhắc nhở nếu Admin/Vendor/Shipper đang xem trang chủ */}
       {!isCustomerOrGuest && (
         <TouchableOpacity
           style={styles.operatorNoticeBar}
           onPress={() => navigation.navigate('Admin')}
         >
           <Text style={styles.operatorNoticeText}>
-            ⚡ Bạn đang ở chế độ xem Sàn dành cho {currentUser.role.toUpperCase()}. Chạm vào đây để quay lại Bảng điều khiển làm việc ➔
+            ⚡ Đang xem ở vai trò {currentUser.role.toUpperCase()} • Chạm để mở Bảng điều khiển ➔
           </Text>
         </TouchableOpacity>
       )}
 
-      {/* THANH TÌM KIẾM TỪ KHÓA */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="🔍 Tìm món nước, trà sữa, tên quán..."
+          placeholder="Tìm đồ uống, quán ăn..."
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -256,7 +245,7 @@ export default function HomeScreen({ navigation }) {
         renderItem={renderProductCard}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={fetchAllData} />
+          <RefreshControl refreshing={loading} onRefresh={fetchAllData} colors={['#6F4E37']} />
         }
         ListHeaderComponent={
           <View>
@@ -278,7 +267,7 @@ export default function HomeScreen({ navigation }) {
                     onlyDiscount && { color: '#FFF' },
                   ]}
                 >
-                  🔥 Đang giảm giá
+                  🔥 Giảm giá
                 </Text>
               </TouchableOpacity>
 
@@ -296,7 +285,7 @@ export default function HomeScreen({ navigation }) {
                       onlyFavorites && { color: '#FFF' },
                     ]}
                   >
-                    ❤️ Yêu thích ({favorites.length})
+                    ❤️ Yêu thích
                   </Text>
                 </TouchableOpacity>
               )}
@@ -314,7 +303,7 @@ export default function HomeScreen({ navigation }) {
                     selectedStoreId === 0 && { color: '#FFF' },
                   ]}
                 >
-                  🏪 Tất cả quán
+                  Tất cả quán
                 </Text>
               </TouchableOpacity>
 
@@ -334,7 +323,7 @@ export default function HomeScreen({ navigation }) {
                       Number(selectedStoreId) === Number(st.id) && { color: '#FFF' },
                     ]}
                   >
-                    🏪 {st.storeName}
+                    {st.storeName}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -372,10 +361,7 @@ export default function HomeScreen({ navigation }) {
               !onlyFavorites &&
               featuredProducts.length > 0 && (
                 <View style={styles.featuredSection}>
-                  <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitle}>🏆 Món Nổi Bật & Bán Chạy Nhất</Text>
-                    <Text style={styles.sectionHint}>Theo lượt mua thực tế</Text>
-                  </View>
+                  <Text style={styles.sectionTitle}>🏆 Bán Chạy Nhất</Text>
 
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {featuredProducts.map((fp) => {
@@ -392,7 +378,7 @@ export default function HomeScreen({ navigation }) {
                           <Image source={{ uri: fp.image }} style={styles.featuredImg} />
                           <View style={styles.featuredBadge}>
                             <Text style={styles.featuredBadgeText}>
-                              🔥 Đã bán {fp.soldCount}
+                              Đã bán {fp.soldCount}
                             </Text>
                           </View>
                           <Text style={styles.featuredStore} numberOfLines={1}>
@@ -410,14 +396,14 @@ export default function HomeScreen({ navigation }) {
               )}
 
             <Text style={[styles.sectionTitle, { marginTop: 10, marginBottom: 8 }]}>
-              🍹 Thực Đơn ({filteredProducts.length} món)
+              Thực Đơn ({filteredProducts.length})
             </Text>
           </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <Text style={styles.emptyText}>
-              Không tìm thấy món nước nào khớp với bộ lọc hiện tại.
+              Không tìm thấy món nước nào phù hợp.
             </Text>
           </View>
         }
@@ -510,16 +496,9 @@ const styles = StyleSheet.create({
     borderColor: '#FFE0B2',
     marginVertical: 6,
   },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#4A3222' },
-  sectionHint: { fontSize: 11, color: '#8D6E63', fontStyle: 'italic' },
+  sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#4A3222', marginBottom: 10 },
   featuredCard: {
-    width: 145,
+    width: 140,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 8,
@@ -550,7 +529,7 @@ const styles = StyleSheet.create({
   },
   productCardDisabled: { opacity: 0.55 },
   imageWrapper: { position: 'relative' },
-  productImage: { width: 92, height: 92, borderRadius: 10 },
+  productImage: { width: 90, height: 90, borderRadius: 10 },
   discountBadge: {
     position: 'absolute',
     top: 4,
