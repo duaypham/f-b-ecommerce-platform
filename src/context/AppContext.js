@@ -5,6 +5,38 @@ import { FALLBACK_PRODUCTS, FALLBACK_VOUCHERS } from '../constants/data';
 
 const AppContext = createContext();
 
+const DEMO_FALLBACK_USERS = {
+  khach1: {
+    username: 'khach1',
+    fullName: 'Phạm Ngọc Duy',
+    role: 'customer',
+    phone: '0987654321',
+    address: '120 Võ Thị Sáu, Biên Hòa',
+  },
+  vendor1: {
+    username: 'vendor1',
+    fullName: 'Chủ Quán Gong Cha',
+    role: 'vendor',
+    phone: '0912345678',
+    address: '123 Võ Thị Sáu, Biên Hòa',
+    store: { id: 1, storeName: 'Gong Cha Biên Hòa', commissionRate: 10 },
+  },
+  shipper1: {
+    username: 'shipper1',
+    fullName: 'Tài Xế Nguyễn Văn Giao',
+    role: 'shipper',
+    phone: '0933445566',
+    address: 'Khu vực Biên Hòa, Đồng Nai',
+  },
+  admin: {
+    username: 'admin',
+    fullName: 'Quản Trị Viên Sàn',
+    role: 'admin',
+    phone: '0901234567',
+    address: 'Trung tâm điều hành Biên Hòa',
+  },
+};
+
 export const AppProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [products, setProducts] = useState([]);
@@ -22,15 +54,18 @@ export const AppProvider = ({ children }) => {
     fetchAllData();
   }, []);
 
+  // 1. ĐỌC DỮ LIỆU CỤC BỘ (ASYNCSTORAGE)
   const loadLocalStorage = async () => {
     try {
       const savedUser = await AsyncStorage.getItem('@currentUser');
       const savedCart = await AsyncStorage.getItem('@guestCart');
       const savedFavs = await AsyncStorage.getItem('@favorites');
+      const savedOrders = await AsyncStorage.getItem('@cachedOrders');
 
       if (savedUser) setCurrentUser(JSON.parse(savedUser));
       if (savedCart) setCart(JSON.parse(savedCart));
       if (savedFavs) setFavorites(JSON.parse(savedFavs));
+      if (savedOrders) setOrders(JSON.parse(savedOrders));
     } catch (error) {
       console.log('Lỗi đọc AsyncStorage:', error.message);
     }
@@ -45,7 +80,16 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 1. ĐỒNG BỘ DỮ LIỆU TỪ MYSQL XAMPP
+  const syncOrdersToStorage = async (newOrders) => {
+    setOrders(newOrders);
+    try {
+      await AsyncStorage.setItem('@cachedOrders', JSON.stringify(newOrders));
+    } catch (e) {
+      console.log('Lỗi lưu cache đơn hàng:', e.message);
+    }
+  };
+
+  // 2. ĐỒNG BỘ DỮ LIỆU TỪ MYSQL XAMPP (KÈM CACHE OFFLINE)
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -65,21 +109,29 @@ export const AppProvider = ({ children }) => {
         setVouchers(voucherRes.data.vouchers || []);
       }
       if (orderRes.data?.success) {
-        setOrders(orderRes.data.orders || []);
+        const remoteOrders = orderRes.data.orders || [];
+        setOrders(remoteOrders);
+        await AsyncStorage.setItem('@cachedOrders', JSON.stringify(remoteOrders));
       }
       if (reviewRes.data?.success) {
         setReviews(reviewRes.data.reviews || []);
       }
     } catch (error) {
-      console.log('Không kết nối được XAMPP, dùng dữ liệu dự phòng:', error.message);
+      console.log('Không kết nối được XAMPP, kích hoạt dữ liệu dự phòng:', error.message);
       if (products.length === 0) setProducts(FALLBACK_PRODUCTS);
       if (vouchers.length === 0) setVouchers(FALLBACK_VOUCHERS);
+
+      // Khôi phục đơn hàng từ cache thiết bị khi mất kết nối mạng
+      const savedOrders = await AsyncStorage.getItem('@cachedOrders');
+      if (savedOrders && orders.length === 0) {
+        setOrders(JSON.parse(savedOrders));
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. XÁC THỰC & 4 PHÂN QUYỀN (CUSTOMER, VENDOR, SHIPPER, ADMIN)
+  // 3. XÁC THỰC & PHÂN QUYỀN
   const login = async (username, password) => {
     try {
       const res = await apiClient.post(API_ENDPOINTS.AUTH, {
@@ -94,9 +146,17 @@ export const AppProvider = ({ children }) => {
       }
       return { success: false, message: res.data?.message || 'Đăng nhập thất bại' };
     } catch (error) {
+      // Cơ chế cứu nguy khi demo: nếu mất mạng LAN nhưng đăng nhập bằng tài khoản mẫu
+      if (DEMO_FALLBACK_USERS[username] && password === '123456') {
+        const fallbackUser = DEMO_FALLBACK_USERS[username];
+        setCurrentUser(fallbackUser);
+        await AsyncStorage.setItem('@currentUser', JSON.stringify(fallbackUser));
+        return { success: true, user: fallbackUser, isOffline: true };
+      }
+
       return {
         success: false,
-        message: 'Không thể kết nối máy chủ XAMPP (Cổng 8080). Vui lòng kiểm tra Apache & MySQL!',
+        message: 'Không thể kết nối máy chủ XAMPP. Vui lòng kiểm tra Apache, MySQL và địa chỉ IP LAN!',
       };
     }
   };
@@ -132,7 +192,12 @@ export const AppProvider = ({ children }) => {
       }
       return { success: false, message: res.data?.message || 'Cập nhật thất bại' };
     } catch (error) {
-      return { success: false, message: 'Lỗi kết nối máy chủ khi cập nhật hồ sơ!' };
+      // Cho phép cập nhật thông tin offline khi không có mạng
+      const updatedUser = { ...currentUser, ...payload };
+      delete updatedUser.newPassword;
+      setCurrentUser(updatedUser);
+      await AsyncStorage.setItem('@currentUser', JSON.stringify(updatedUser));
+      return { success: true, message: 'Đã lưu thay đổi vào bộ nhớ máy (chưa đồng bộ máy chủ)!' };
     }
   };
 
@@ -141,7 +206,7 @@ export const AppProvider = ({ children }) => {
     await AsyncStorage.removeItem('@currentUser');
   };
 
-  // 3. DANH SÁCH YÊU THÍCH
+  // 4. DANH SÁCH YÊU THÍCH
   const toggleFavorite = async (productId) => {
     const exists = favorites.includes(productId);
     const updated = exists
@@ -151,7 +216,7 @@ export const AppProvider = ({ children }) => {
     await AsyncStorage.setItem('@favorites', JSON.stringify(updated));
   };
 
-  // 4. QUẢN LÝ GIỎ HÀNG
+  // 5. QUẢN LÝ GIỎ HÀNG
   const addToCart = (item) => {
     const toppingsKey = (item.toppings || []).slice().sort().join(',');
     const signature = `${item.productId}_${item.size}_${item.sugar}_${item.ice}_${toppingsKey}`;
@@ -213,7 +278,7 @@ export const AppProvider = ({ children }) => {
     syncCartToStorage(updatedCart);
   };
 
-  // 5. ĐẶT HÀNG & LUỒNG SHIPPER / CỬA HÀNG CẬP NHẬT TRẠNG THÁI
+  // 6. TẠO ĐƠN & ĐIỀU PHỐI TIẾN TRÌNH 4 BƯỚC
   const createOrder = async (orderPayload) => {
     try {
       const res = await apiClient.post(API_ENDPOINTS.ORDERS, {
@@ -227,7 +292,21 @@ export const AppProvider = ({ children }) => {
       }
       return { success: false, message: res.data?.message || 'Không thể tạo đơn hàng' };
     } catch (error) {
-      return { success: false, message: 'Lỗi kết nối XAMPP khi tạo đơn hàng!' };
+      // Lưu đơn offline vào AsyncStorage khi mất kết nối
+      const fallbackOrder = {
+        ...orderPayload,
+        orderCode: orderPayload.orderCode || `ORD${Math.floor(100000 + Math.random() * 900000)}`,
+        status: 'Đang chuẩn bị',
+        createdAt: new Date().toISOString(),
+      };
+      const updatedOrders = [fallbackOrder, ...orders];
+      await syncOrdersToStorage(updatedOrders);
+      clearCart();
+      return {
+        success: true,
+        orderCode: fallbackOrder.orderCode,
+        isOffline: true,
+      };
     }
   };
 
@@ -249,11 +328,24 @@ export const AppProvider = ({ children }) => {
       }
       return { success: false, message: res.data?.message };
     } catch (error) {
-      return { success: false, message: 'Lỗi kết nối khi cập nhật trạng thái đơn!' };
+      // Cập nhật trạng thái offline nếu mất kết nối
+      const updatedOrders = orders.map((o) => {
+        if (o.orderCode === orderCode) {
+          const mod = { ...o, status };
+          if (shipperInfo) {
+            mod.shipper_username = shipperInfo.username;
+            mod.shipperName = shipperInfo.fullName;
+          }
+          return mod;
+        }
+        return o;
+      });
+      await syncOrdersToStorage(updatedOrders);
+      return { success: true, message: 'Đã cập nhật trạng thái đơn (chế độ cục bộ).' };
     }
   };
 
-  // 6. VENDOR CRUD SẢN PHẨM & ADMIN GỬI CẢNH CÁO VI PHẠM
+  // 7. VENDOR CRUD SẢN PHẨM & CẢNH CÁO
   const saveProduct = async (productPayload) => {
     try {
       const res = await apiClient.post(API_ENDPOINTS.PRODUCTS, {
@@ -341,7 +433,7 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 7. QUẢN LÝ MÃ GIẢM GIÁ (VOUCHER TOÀN SÀN & VOUCHER CỬA HÀNG)
+  // 8. QUẢN LÝ VOUCHER
   const saveVoucher = async (voucherPayload) => {
     try {
       const res = await apiClient.post(API_ENDPOINTS.VOUCHERS, {
@@ -374,7 +466,7 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 8. ĐÁNH GIÁ SẢN PHẨM SAU KHI MUA (VERIFIED REVIEW)
+  // 9. ĐÁNH GIÁ MÓN (VERIFIED REVIEW)
   const getEligibleOrderForReview = (productId) => {
     if (!currentUser) return null;
     const completedOrders = orders.filter(
