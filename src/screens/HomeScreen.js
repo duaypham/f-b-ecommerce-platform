@@ -41,8 +41,8 @@ export default function HomeScreen({ navigation }) {
 
   const featuredProducts = useMemo(() => {
     return products
-      .filter((p) => p.isBestSeller && p.isAvailable)
-      .sort((a, b) => b.soldCount - a.soldCount);
+      .filter((p) => p.isAvailable && Number(p.soldCount) > 25 && p.isBestSeller)
+      .sort((a, b) => Number(b.soldCount) - Number(a.soldCount));
   }, [products]);
 
   const filteredProducts = useMemo(() => {
@@ -119,7 +119,10 @@ export default function HomeScreen({ navigation }) {
           </Text>
 
           <Text style={styles.metaText}>
-            ⭐ {item.avgRating || '5.0'} • Đã bán {item.soldCount || 0}
+            {Number(item.reviewCount) > 0 && Number(item.avgRating) > 0
+              ? `⭐ ${Number(item.avgRating).toFixed(1)} (${item.reviewCount})`
+              : '🆕 Chưa có đánh giá'}{' '}
+            • Đã bán {item.soldCount || 0}
           </Text>
 
           <View style={styles.priceRow}>
@@ -225,7 +228,7 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Tìm đồ uống, quán ăn..."
+          placeholder="Tìm đồ uống, cửa hàng..."
           value={searchQuery}
           onChangeText={setSearchQuery}
         />

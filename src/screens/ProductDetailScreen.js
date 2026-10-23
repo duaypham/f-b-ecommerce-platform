@@ -175,8 +175,12 @@ export default function ProductDetailScreen({ route, navigation }) {
               )}
             </View>
             <Text style={styles.ratingSummary}>
-              ⭐ {product.avgRating || '5.0'} • Đã bán {product.soldCount || 0}
-            </Text>
+              {Number(product.reviewCount) > 0 && Number(product.avgRating) > 0
+                ? `⭐ ${Number(product.avgRating).toFixed(1)} (${product.reviewCount} đánh giá)`
+                : '🆕 Chưa có đánh giá'}{' '}
+              • Đã bán {product.soldCount || 0}
+          </Text>
+          
           </View>
 
           <Text style={styles.descriptionText}>

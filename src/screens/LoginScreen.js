@@ -124,7 +124,7 @@ export default function LoginScreen({ navigation, route }) {
                 onPress={() => fillDemoAccount('shipper1', '123456')}
               >
                 <Text style={[styles.demoBadgeText, { color: '#1565C0' }]}>
-                  🛵 Tài xế
+                  🛵 Shipper
                 </Text>
               </TouchableOpacity>
 
