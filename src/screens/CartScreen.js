@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useApp } from '../context/AppContext';
@@ -24,13 +25,14 @@ export default function CartScreen({ navigation }) {
     removeFromCart,
     clearCart,
     createOrder,
+    fetchAllData,
   } = useApp();
 
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [note, setNote] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('COD'); // 'COD' | 'Chuyển khoản QR'
+  const [paymentMethod, setPaymentMethod] = useState('COD');
 
   const [voucherInput, setVoucherInput] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState(null);
@@ -38,12 +40,18 @@ export default function CartScreen({ navigation }) {
   const [loadingGps, setLoadingGps] = useState(false);
   const [showVirtualMap, setShowVirtualMap] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // State cho Cổng Thanh toán QR đếm ngược (Countdown Modal)
   const [qrModalVisible, setQrModalVisible] = useState(false);
-  const [qrSecondsLeft, setQrSecondsLeft] = useState(120); // 120 giây (2 phút)
+  const [qrSecondsLeft, setQrSecondsLeft] = useState(120);
   const [pendingOrderCode, setPendingOrderCode] = useState('');
   const [verifyingBank, setVerifyingBank] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchAllData();
+    setRefreshing(false);
+  }, [fetchAllData]);
 
   useEffect(() => {
     if (currentUser) {
@@ -53,15 +61,14 @@ export default function CartScreen({ navigation }) {
     }
   }, [currentUser]);
 
-  // Bộ đếm ngược thời gian thanh toán QR
   useEffect(() => {
     if (!qrModalVisible) return;
 
     if (qrSecondsLeft <= 0) {
       setQrModalVisible(false);
       Alert.alert(
-        '⏰ Hết thời gian thanh toán!',
-        'Phiên giao dịch mã QR đã hết hạn. Bạn đã được đưa trở lại giỏ hàng, vui lòng thực hiện lại nếu muốn tiếp tục mua!',
+        'Hết thời gian',
+        'Phiên mã QR đã hết hạn. Vui lòng thanh toán lại!'
       );
       return;
     }
@@ -79,21 +86,18 @@ export default function CartScreen({ navigation }) {
     return `${mins < 10 ? '0' : ''}${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
   };
 
-  // Tính tổng tiền toàn giỏ hàng
   const subTotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.totalPrice, 0);
   }, [cart]);
 
-  // Tính tổng tiền hợp lệ cho Voucher (Nếu là Voucher của riêng 1 quán thì chỉ tính tiền các món thuộc quán đó)
   const getEligibleSubTotalForVoucher = (voucher) => {
     if (!voucher) return 0;
-    if (!voucher.store_id) return subTotal; // Voucher toàn sàn
+    if (!voucher.store_id) return subTotal;
     return cart
       .filter((item) => Number(item.storeId) === Number(voucher.store_id))
       .reduce((sum, item) => sum + item.totalPrice, 0);
   };
 
-  // Tính số tiền được giảm từ Voucher
   const discountAmount = useMemo(() => {
     if (!appliedVoucher) return 0;
     const targetSubTotal = getEligibleSubTotalForVoucher(appliedVoucher);
@@ -112,15 +116,12 @@ export default function CartScreen({ navigation }) {
   }, [appliedVoucher, subTotal, cart]);
 
   const totalAmount = Math.max(0, subTotal - discountAmount);
-  const estimatedPlatformFee = Math.round(subTotal * 0.1);
-
   const formatCurrency = (val) => `${Number(val || 0).toLocaleString('vi-VN')}đ`;
 
-  // Xử lý áp dụng Voucher (Hỗ trợ cả Voucher Toàn Sàn & Voucher Cửa Hàng)
   const handleApplyVoucherCode = (codeToApply) => {
     const cleanCode = (codeToApply || voucherInput).trim().toUpperCase();
     if (!cleanCode) {
-      Alert.alert('Thông báo', 'Vui lòng nhập hoặc chọn một mã giảm giá!');
+      Alert.alert('Thông báo', 'Vui lòng nhập mã giảm giá!');
       return;
     }
 
@@ -129,7 +130,7 @@ export default function CartScreen({ navigation }) {
     );
 
     if (!found) {
-      Alert.alert('Mã không hợp lệ', 'Mã giảm giá không tồn tại hoặc đã ngừng hoạt động!');
+      Alert.alert('Không hợp lệ', 'Mã không tồn tại hoặc đã hết hạn!');
       return;
     }
 
@@ -137,10 +138,8 @@ export default function CartScreen({ navigation }) {
 
     if (found.store_id && eligibleAmount === 0) {
       Alert.alert(
-        'Voucher riêng của quán',
-        `Mã ${found.code} chỉ áp dụng cho các món thuộc cửa hàng "${
-          found.storeName || '#' + found.store_id
-        }". Giỏ hàng của bạn hiện chưa có món của quán này!`
+        'Thông báo',
+        `Mã này chỉ áp dụng cho món của quán "${found.storeName || '#' + found.store_id}".`
       );
       return;
     }
@@ -148,30 +147,21 @@ export default function CartScreen({ navigation }) {
     if (eligibleAmount < found.minOrder) {
       Alert.alert(
         'Chưa đủ điều kiện',
-        `Mã ${found.code} yêu cầu tổng tiền món ${
-          found.store_id ? `của quán ${found.storeName}` : 'toàn đơn'
-        } tối thiểu từ ${formatCurrency(found.minOrder)}. Hiện tại mới đạt ${formatCurrency(
-          eligibleAmount
-        )}.`
+        `Đơn tối thiểu từ ${formatCurrency(found.minOrder)}. Hiện tại mới đạt ${formatCurrency(eligibleAmount)}.`
       );
       return;
     }
 
     setAppliedVoucher(found);
     setVoucherInput(found.code);
-    Alert.alert('Áp dụng thành công!', `Đã áp dụng mã ${found.code}: ${found.title}`);
+    Alert.alert('Thành công', `Đã áp dụng mã: ${found.code}`);
   };
 
-  // Định vị GPS thực tế
   const handleGetRealGPS = async () => {
     setLoadingGps(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Chưa cấp quyền vị trí',
-          'Hãy chọn nhanh địa điểm giao hàng từ Bản đồ ảo bên dưới!'
-        );
         setShowVirtualMap(true);
         setLoadingGps(false);
         return;
@@ -194,24 +184,17 @@ export default function CartScreen({ navigation }) {
           .filter(Boolean)
           .join(', ');
 
-        setAddress(
-          formatted || `Tọa độ GPS (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`
-        );
+        setAddress(formatted || `Tọa độ (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
       } else {
-        setAddress(`Tọa độ GPS (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`);
+        setAddress(`Tọa độ (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`);
       }
     } catch (error) {
-      Alert.alert(
-        'Gợi ý chọn vị trí',
-        'Thiết bị ảo chưa bật sóng vệ tinh GPS. Mời bạn chọn điểm giao hàng trên Bản đồ ảo!'
-      );
       setShowVirtualMap(true);
     } finally {
       setLoadingGps(false);
     }
   };
 
-  // Hàm gửi đơn hàng thật sự lên MySQL XAMPP
   const submitFinalOrderToServer = async (generatedCode, paymentStatusLabel) => {
     const primaryStoreId = cart[0]?.storeId || 1;
 
@@ -238,35 +221,34 @@ export default function CartScreen({ navigation }) {
       setAppliedVoucher(null);
       setVoucherInput('');
       Alert.alert(
-        '🎉 Đặt hàng thành công!',
-        `Mã đơn hàng: #${res.orderCode}\nTrạng thái: ${paymentStatusLabel}\nCửa hàng đang chuẩn bị món cho bạn!`,
+        'Đặt hàng thành công',
+        `Mã đơn: #${res.orderCode}\nCửa hàng đang chuẩn bị món cho bạn!`,
         [
           {
-            text: 'Theo dõi tiến trình đơn',
+            text: 'Xem đơn hàng',
             onPress: () => navigation.replace('OrderHistory'),
           },
         ]
       );
     } else {
-      Alert.alert('Lỗi đặt hàng', res.message);
+      Alert.alert('Lỗi', res.message);
     }
   };
 
-  // Kiểm tra hợp lệ trước khi thanh toán
   const handleCheckoutPress = async () => {
     if (cart.length === 0) {
-      Alert.alert('Giỏ hàng trống', 'Vui lòng chọn ít nhất 1 món nước!');
+      Alert.alert('Giỏ hàng trống', 'Vui lòng chọn món trước!');
       return;
     }
 
     if (!currentUser) {
       Alert.alert(
         'Yêu cầu đăng nhập',
-        'Vui lòng đăng nhập tài khoản để hoàn tất đặt đơn!',
+        'Vui lòng đăng nhập để hoàn tất đặt đơn!',
         [
-          { text: 'Để sau', style: 'cancel' },
+          { text: 'Hủy', style: 'cancel' },
           {
-            text: 'Đăng nhập ngay',
+            text: 'Đăng nhập',
             onPress: () => navigation.navigate('Login', { redirectTo: 'Cart' }),
           },
         ]
@@ -276,15 +258,14 @@ export default function CartScreen({ navigation }) {
 
     if (!customerName.trim() || !phone.trim() || !address.trim()) {
       Alert.alert(
-        'Thiếu thông tin giao hàng',
-        'Vui lòng nhập đầy đủ Họ tên, Số điện thoại và Địa chỉ nhận hàng (hoặc bấm lấy GPS)!'
+        'Thiếu thông tin',
+        'Vui lòng nhập đầy đủ Họ tên, Số điện thoại và Địa chỉ nhận hàng!'
       );
       return;
     }
 
     const tempOrderCode = 'ORD' + Math.floor(100000 + Math.random() * 900000);
 
-    // Nếu chọn Chuyển khoản QR -> Mở Cổng Thanh toán QR đếm ngược 120s
     if (paymentMethod === 'Chuyển khoản QR') {
       setPendingOrderCode(tempOrderCode);
       setQrSecondsLeft(120);
@@ -292,11 +273,9 @@ export default function CartScreen({ navigation }) {
       return;
     }
 
-    // Nếu chọn COD -> Tạo đơn ngay lập tức
-    await submitFinalOrderToServer(tempOrderCode, 'Thanh toán khi nhận hàng (COD)');
+    await submitFinalOrderToServer(tempOrderCode, 'Thanh toán tiền mặt (COD)');
   };
 
-  // Khi khách bấm "Tôi đã chuyển khoản" trên cổng QR (Giả lập Webhook ngân hàng đối soát)
   const handleConfirmQrPaymentSuccess = () => {
     setVerifyingBank(true);
     setTimeout(async () => {
@@ -304,31 +283,37 @@ export default function CartScreen({ navigation }) {
       setQrModalVisible(false);
       await submitFinalOrderToServer(
         pendingOrderCode,
-        'Đã thanh toán qua VietQR'
+        'Đã thanh toán qua QR'
       );
-    }, 1500);
+    }, 1200);
   };
 
-  // Tạo URL ảnh mã VietQR động theo đúng số tiền và mã đơn
   const vietQrImageUrl = useMemo(() => {
     const addInfo = encodeURIComponent(`THANHTOAN ${pendingOrderCode}`);
     const accName = encodeURIComponent('SAN FB TRA SUA BIEN HOA');
     return `https://img.vietqr.io/image/MB-0987654321-compact2.png?amount=${totalAmount}&addInfo=${addInfo}&accountName=${accName}`;
   }, [totalAmount, pendingOrderCode]);
 
+  // XỬ LÝ KHI GIỎ HÀNG TRỐNG
   if (cart.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyEmoji}>🛒</Text>
-        <Text style={styles.emptyTitle}>Giỏ hàng của bạn đang trống</Text>
+        <Text style={styles.emptyTitle}>Giỏ hàng đang trống</Text>
         <Text style={styles.emptySub}>
-          Hãy khám phá các món trà sữa và cà phê đang giảm giá trên trang chủ nhé!
+          Chọn thêm món trà sữa hoặc cà phê bạn thích nhé!
         </Text>
         <TouchableOpacity
           style={styles.goHomeBtn}
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.popToTop(); // Xả sạch stack và quay về Home gốc
+            } else {
+              navigation.replace('Home');
+            }
+          }}
         >
-          <Text style={styles.goHomeBtnText}>KHÁM PHÁ THỰC ĐƠN NGAY</Text>
+          <Text style={styles.goHomeBtnText}>KHÁM PHÁ MENU</Text>
         </TouchableOpacity>
       </View>
     );
@@ -336,11 +321,15 @@ export default function CartScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* 1. DANH SÁCH MÓN TRONG GIỎ */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6F4E37']} />
+        }
+      >
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>🍹 Món đã chọn ({cart.length})</Text>
+            <Text style={styles.sectionTitle}>Món đã chọn ({cart.length})</Text>
             <TouchableOpacity onPress={clearCart}>
               <Text style={styles.clearAllText}>Xóa tất cả</Text>
             </TouchableOpacity>
@@ -350,14 +339,14 @@ export default function CartScreen({ navigation }) {
             <View key={item.cartItemId} style={styles.cartItem}>
               <Image source={{ uri: item.image }} style={styles.itemImg} />
               <View style={styles.itemInfo}>
-                <Text style={styles.itemStore}>🏪 {item.storeName}</Text>
+                <Text style={styles.itemStore}>{item.storeName}</Text>
                 <Text style={styles.itemName}>{item.name}</Text>
                 <Text style={styles.itemOptions}>
                   Size {item.size} • {item.sugar} đường • {item.ice}
                 </Text>
                 {item.toppings && item.toppings.length > 0 && (
                   <Text style={styles.itemToppings}>
-                    + Topping: {item.toppings.join(', ')}
+                    + {item.toppings.join(', ')}
                   </Text>
                 )}
 
@@ -394,15 +383,12 @@ export default function CartScreen({ navigation }) {
           ))}
         </View>
 
-        {/* 2. MÃ GIẢM GIÁ (VOUCHER SÀN & VOUCHER CỬA HÀNG) */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>
-            🎟️ Mã giảm giá (Voucher Sàn & Cửa hàng)
-          </Text>
+          <Text style={styles.sectionTitle}>Mã giảm giá</Text>
           <View style={styles.voucherInputRow}>
             <TextInput
               style={styles.voucherInput}
-              placeholder="Nhập mã (VD: GIAM10K, GONGCHA15)"
+              placeholder="Nhập mã ưu đãi..."
               value={voucherInput}
               onChangeText={setVoucherInput}
               autoCapitalize="characters"
@@ -415,9 +401,6 @@ export default function CartScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.subHint}>
-            Chạm để chọn nhanh Voucher Toàn sàn hoặc Voucher riêng của Quán:
-          </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {vouchers
               .filter((v) => v.isActive)
@@ -437,14 +420,14 @@ export default function CartScreen({ navigation }) {
                     onPress={() => handleApplyVoucherCode(v.code)}
                   >
                     <Text style={styles.voucherScopeBadge}>
-                      {v.store_id ? `🏪 Quán: ${v.storeName || '#' + v.store_id}` : '🌐 Toàn sàn'}
+                      {v.store_id ? v.storeName : 'Toàn sàn'}
                     </Text>
-                    <Text style={styles.voucherCodeText}>🏷️ {v.code}</Text>
+                    <Text style={styles.voucherCodeText}>{v.code}</Text>
                     <Text style={styles.voucherDescText} numberOfLines={2}>
                       {v.title}
                     </Text>
                     <Text style={styles.voucherMinText}>
-                      Đơn tối thiểu: {formatCurrency(v.minOrder)}
+                      Đơn từ {formatCurrency(v.minOrder)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -452,31 +435,30 @@ export default function CartScreen({ navigation }) {
           </ScrollView>
         </View>
 
-        {/* 3. ĐỊA CHỈ GIAO HÀNG (GPS & BẢN ĐỒ ẢO) */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>📍 Thông tin & Địa chỉ Giao hàng (GPS)</Text>
+          <Text style={styles.sectionTitle}>Địa chỉ nhận hàng</Text>
 
-          <Text style={styles.inputLabel}>Người nhận (*)</Text>
+          <Text style={styles.inputLabel}>Người nhận</Text>
           <TextInput
             style={styles.input}
-            placeholder="Nhập họ tên người nhận"
+            placeholder="Họ và tên..."
             value={customerName}
             onChangeText={setCustomerName}
           />
 
-          <Text style={styles.inputLabel}>Số điện thoại nhận hàng (*)</Text>
+          <Text style={styles.inputLabel}>Số điện thoại</Text>
           <TextInput
             style={styles.input}
-            placeholder="Nhập số điện thoại"
+            placeholder="Số điện thoại nhận..."
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
           />
 
-          <Text style={styles.inputLabel}>Địa chỉ giao hàng (*)</Text>
+          <Text style={styles.inputLabel}>Địa chỉ giao</Text>
           <TextInput
             style={styles.input}
-            placeholder="Nhập số nhà, tên đường hoặc bấm định vị GPS bên dưới"
+            placeholder="Số nhà, tên đường hoặc bấm định vị..."
             value={address}
             onChangeText={setAddress}
           />
@@ -490,16 +472,14 @@ export default function CartScreen({ navigation }) {
               {loadingGps ? (
                 <ActivityIndicator color="#FFF" size="small" />
               ) : (
-                <Text style={styles.gpsBtnText}>📍 Định vị GPS hiện tại</Text>
+                <Text style={styles.gpsBtnText}>📍 Lấy vị trí GPS</Text>
               )}
             </TouchableOpacity>
           </View>
 
           {showVirtualMap && (
             <View style={styles.mapListContainer}>
-              <Text style={styles.mapListHeader}>
-                📌 Chọn nhanh tọa độ Google Maps giả lập:
-              </Text>
+              <Text style={styles.mapListHeader}>Gợi ý địa điểm nhận hàng:</Text>
               {VIRTUAL_MAP_LOCATIONS.map((loc) => (
                 <TouchableOpacity
                   key={loc.id}
@@ -516,18 +496,17 @@ export default function CartScreen({ navigation }) {
             </View>
           )}
 
-          <Text style={styles.inputLabel}>Ghi chú cho quán / Tài xế</Text>
+          <Text style={styles.inputLabel}>Ghi chú đơn hàng</Text>
           <TextInput
             style={styles.input}
-            placeholder="VD: Giao giờ hành chính, để ở quầy lễ tân..."
+            placeholder="Ví dụ: Giao giờ trưa, gọi trước khi đến..."
             value={note}
             onChangeText={setNote}
           />
         </View>
 
-        {/* 4. PHƯƠNG THỨC THANH TOÁN & TỔNG KẾT */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>💳 Phương thức thanh toán</Text>
+          <Text style={styles.sectionTitle}>Phương thức thanh toán</Text>
           <View style={styles.paymentRow}>
             <TouchableOpacity
               style={[
@@ -542,7 +521,7 @@ export default function CartScreen({ navigation }) {
                   paymentMethod === 'COD' && styles.paymentOptionTextActive,
                 ]}
               >
-                💵 Tiền mặt (COD)
+                💵 Tiền mặt
               </Text>
             </TouchableOpacity>
 
@@ -564,30 +543,17 @@ export default function CartScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {paymentMethod === 'Chuyển khoản QR' && (
-            <View style={styles.qrPreviewNotice}>
-              <Text style={styles.qrPreviewNoticeText}>
-                💡 Khi bấm "Xác nhận đặt hàng", hệ thống sẽ hiển thị mã VietQR kèm đồng hồ đếm ngược 02:00 phút để bạn quét thanh toán.
-              </Text>
-            </View>
-          )}
-
           <View style={styles.summaryBox}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Tạm tính ({cart.length} món):</Text>
+              <Text style={styles.summaryLabel}>Tạm tính:</Text>
               <Text style={styles.summaryVal}>{formatCurrency(subTotal)}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>
-                Giảm giá Voucher {appliedVoucher ? `(${appliedVoucher.code})` : ''}:
+                Giảm giá {appliedVoucher ? `(${appliedVoucher.code})` : ''}:
               </Text>
               <Text style={[styles.summaryVal, { color: '#2E7D32' }]}>
                 -{formatCurrency(discountAmount)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryFeeNote}>
-                * Phí hoa hồng sàn thu từ đối tác (10%): {formatCurrency(estimatedPlatformFee)}
               </Text>
             </View>
             <View style={[styles.summaryRow, styles.totalRow]}>
@@ -598,7 +564,6 @@ export default function CartScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* NÚT XÁC NHẬN ĐẶT HÀNG */}
       <View style={styles.bottomCheckoutBar}>
         <View>
           <Text style={styles.bottomTotalLabel}>Tổng cộng</Text>
@@ -615,18 +580,15 @@ export default function CartScreen({ navigation }) {
           ) : (
             <Text style={styles.checkoutBtnText}>
               {!currentUser
-                ? 'ĐĂNG NHẬP ĐỂ ĐẶT ĐƠN'
+                ? 'ĐĂNG NHẬP ĐỂ ĐẶT'
                 : paymentMethod === 'Chuyển khoản QR'
-                ? 'MỞ MÃ QR THANH TOÁN'
-                : 'XÁC NHẬN ĐẶT HÀNG'}
+                ? 'MỞ MÃ QR'
+                : 'ĐẶT HÀNG'}
             </Text>
           )}
         </TouchableOpacity>
       </View>
 
-      {/* ============================================================
-          MODAL CỔNG THANH TOÁN MÃ QR ĐẾM NGƯỢC THỜI GIAN THỰC
-      ============================================================ */}
       <Modal
         visible={qrModalVisible}
         transparent
@@ -635,12 +597,11 @@ export default function CartScreen({ navigation }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.qrModalCard}>
-            <Text style={styles.qrModalTitle}>🏦 CỔNG THANH TOÁN VIETQR</Text>
+            <Text style={styles.qrModalTitle}>CỔNG THANH TOÁN QR</Text>
             <Text style={styles.qrModalSubtitle}>
-              Quét mã QR bên dưới bằng ứng dụng Ngân hàng hoặc Ví điện tử
+              Quét mã bằng ứng dụng Ngân hàng hoặc Ví điện tử
             </Text>
 
-            {/* Đồng hồ đếm ngược */}
             <View
               style={[
                 styles.timerBadge,
@@ -653,11 +614,10 @@ export default function CartScreen({ navigation }) {
                   qrSecondsLeft <= 30 && { color: '#D32F2F' },
                 ]}
               >
-                ⏳ Thời gian còn lại: {formatCountdown(qrSecondsLeft)}
+                Thời gian còn lại: {formatCountdown(qrSecondsLeft)}
               </Text>
             </View>
 
-            {/* Hình ảnh Mã VietQR động */}
             <View style={styles.qrImageWrapper}>
               <Image
                 source={{ uri: vietQrImageUrl }}
@@ -666,13 +626,9 @@ export default function CartScreen({ navigation }) {
               />
             </View>
 
-            {/* Chi tiết chuyển khoản */}
             <View style={styles.bankInfoBox}>
               <Text style={styles.bankInfoLine}>
-                Ngân hàng: <Text style={styles.boldText}>MB Bank (Quân Đội)</Text>
-              </Text>
-              <Text style={styles.bankInfoLine}>
-                Chủ TK: <Text style={styles.boldText}>SAN FB TRA SUA BIEN HOA</Text>
+                Ngân hàng: <Text style={styles.boldText}>MB Bank</Text>
               </Text>
               <Text style={styles.bankInfoLine}>
                 Số tiền:{' '}
@@ -688,7 +644,6 @@ export default function CartScreen({ navigation }) {
               </Text>
             </View>
 
-            {/* Nút xác nhận đã chuyển khoản thành công (Giả lập Webhook ngân hàng) */}
             <TouchableOpacity
               style={styles.confirmPaidBtn}
               onPress={handleConfirmQrPaymentSuccess}
@@ -698,27 +653,22 @@ export default function CartScreen({ navigation }) {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <ActivityIndicator color="#FFF" size="small" />
                   <Text style={styles.confirmPaidBtnText}>
-                    Đang đối soát giao dịch ngân hàng...
+                    Đang đối soát giao dịch...
                   </Text>
                 </View>
               ) : (
                 <Text style={styles.confirmPaidBtnText}>
-                  ✅ TÔI ĐÃ CHUYỂN KHOẢN (XÁC NHẬN)
+                  TÔI ĐÃ CHUYỂN KHOẢN
                 </Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.cancelQrBtn}
-              onPress={() => {
-                setQrModalVisible(false);
-                Alert.alert('Đã hủy phiên QR', 'Bạn đã quay lại màn hình Giỏ hàng.');
-              }}
+              onPress={() => setQrModalVisible(false)}
               disabled={verifyingBank}
             >
-              <Text style={styles.cancelQrBtnText}>
-                ✕ Hủy giao dịch & Quay lại Giỏ hàng
-              </Text>
+              <Text style={styles.cancelQrBtnText}>Hủy giao dịch</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -737,7 +687,7 @@ const styles = StyleSheet.create({
     padding: 30,
     backgroundColor: '#F7F3F0',
   },
-  emptyEmoji: { fontSize: 60, marginBottom: 12 },
+  emptyEmoji: { fontSize: 50, marginBottom: 12 },
   emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#4A3222' },
   emptySub: {
     fontSize: 13,
@@ -750,14 +700,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#6F4E37',
     paddingHorizontal: 22,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 8,
   },
-  goHomeBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  goHomeBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   sectionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 14,
-    marginBottom: 14,
+    marginBottom: 12,
     elevation: 2,
   },
   sectionHeaderRow: {
@@ -766,40 +716,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#3E2723', marginBottom: 8 },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#3E2723', marginBottom: 8 },
   clearAllText: { fontSize: 12, color: '#D32F2F', fontWeight: 'bold' },
   cartItem: {
     flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: '#F0EAE4',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
-  itemImg: { width: 70, height: 70, borderRadius: 10 },
+  itemImg: { width: 64, height: 64, borderRadius: 8 },
   itemInfo: { flex: 1, marginLeft: 12 },
   itemStore: { fontSize: 11, color: '#8D6E63', fontWeight: '600' },
   itemName: { fontSize: 14, fontWeight: 'bold', color: '#3E2723', marginTop: 2 },
   itemOptions: { fontSize: 12, color: '#616161', marginTop: 2 },
-  itemToppings: { fontSize: 12, color: '#6F4E37', marginTop: 2, fontStyle: 'italic' },
+  itemToppings: { fontSize: 12, color: '#6F4E37', marginTop: 2 },
   itemBottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   itemTotalPrice: { fontSize: 14, fontWeight: 'bold', color: '#D84315' },
-  qtyBox: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  qtyBox: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   qtyBtn: {
     backgroundColor: '#EFEBE7',
-    width: 26,
-    height: 26,
+    width: 24,
+    height: 24,
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  qtyBtnText: { fontSize: 15, fontWeight: 'bold', color: '#4E342E' },
-  qtyText: { fontSize: 14, fontWeight: 'bold', color: '#3E2723' },
+  qtyBtnText: { fontSize: 14, fontWeight: 'bold', color: '#4E342E' },
+  qtyText: { fontSize: 13, fontWeight: 'bold', color: '#3E2723' },
   removeBtn: { marginLeft: 4, padding: 4 },
-  removeBtnText: { fontSize: 15 },
+  removeBtnText: { fontSize: 14 },
   voucherInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   voucherInput: {
     flex: 1,
@@ -808,7 +758,7 @@ const styles = StyleSheet.create({
     borderColor: '#D7CCC8',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     fontSize: 13,
   },
   applyVoucherBtn: {
@@ -818,15 +768,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   applyVoucherText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
-  subHint: { fontSize: 12, color: '#7D6E63', marginBottom: 8 },
   voucherTicket: {
     backgroundColor: '#FFF8F0',
     borderWidth: 1,
     borderColor: '#FFCC80',
-    borderRadius: 10,
-    padding: 10,
-    marginRight: 10,
-    width: 205,
+    borderRadius: 8,
+    padding: 8,
+    marginRight: 8,
+    width: 190,
   },
   voucherTicketStore: {
     backgroundColor: '#F3E5F5',
@@ -835,7 +784,7 @@ const styles = StyleSheet.create({
   voucherTicketActive: {
     backgroundColor: '#E8F5E9',
     borderColor: '#2E7D32',
-    borderWidth: 2,
+    borderWidth: 1.5,
   },
   voucherScopeBadge: {
     fontSize: 10,
@@ -846,54 +795,44 @@ const styles = StyleSheet.create({
   voucherCodeText: { fontSize: 13, fontWeight: 'bold', color: '#E65100' },
   voucherDescText: { fontSize: 11, color: '#3E2723', marginTop: 2 },
   voucherMinText: { fontSize: 10, color: '#757575', marginTop: 4 },
-  inputLabel: { fontSize: 12, fontWeight: '600', color: '#4E342E', marginTop: 8, marginBottom: 4 },
+  inputLabel: { fontSize: 12, fontWeight: '600', color: '#4E342E', marginTop: 6, marginBottom: 2 },
   input: {
     backgroundColor: '#FAF7F5',
     borderWidth: 1,
     borderColor: '#E0D6CE',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
     fontSize: 13,
   },
-  gpsActionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  gpsActionRow: { marginTop: 8 },
   gpsBtn: {
-    flex: 1,
     backgroundColor: '#2E7D32',
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderRadius: 8,
     alignItems: 'center',
   },
   gpsBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-  virtualMapBtn: {
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#90CAF9',
-  },
-  virtualMapBtnText: { color: '#1565C0', fontSize: 12, fontWeight: 'bold' },
   mapListContainer: {
     backgroundColor: '#F5F9FF',
     borderRadius: 8,
-    padding: 10,
+    padding: 8,
     marginTop: 8,
     borderWidth: 1,
     borderColor: '#BBDEFB',
   },
-  mapListHeader: { fontSize: 12, fontWeight: 'bold', color: '#0D47A1', marginBottom: 6 },
+  mapListHeader: { fontSize: 11, fontWeight: 'bold', color: '#0D47A1', marginBottom: 4 },
   mapListItem: {
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: '#E3F2FD',
   },
   mapListTitle: { fontSize: 12, fontWeight: 'bold', color: '#1976D2' },
   mapListAddr: { fontSize: 11, color: '#555' },
-  paymentRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  paymentRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   paymentOption: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#D7CCC8',
@@ -903,36 +842,26 @@ const styles = StyleSheet.create({
   paymentOptionActive: { backgroundColor: '#6F4E37', borderColor: '#6F4E37' },
   paymentOptionText: { fontSize: 13, fontWeight: '600', color: '#4E342E' },
   paymentOptionTextActive: { color: '#FFF' },
-  qrPreviewNotice: {
-    backgroundColor: '#E3F2FD',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#90CAF9',
-  },
-  qrPreviewNoticeText: { fontSize: 12, color: '#0D47A1' },
   summaryBox: {
     borderTopWidth: 1,
     borderTopColor: '#EFEBE7',
-    paddingTop: 10,
+    paddingTop: 8,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 4,
   },
-  summaryLabel: { fontSize: 13, color: '#616161' },
-  summaryVal: { fontSize: 13, fontWeight: 'bold', color: '#3E2723' },
-  summaryFeeNote: { fontSize: 11, color: '#8D6E63', fontStyle: 'italic' },
+  summaryLabel: { fontSize: 12, color: '#616161' },
+  summaryVal: { fontSize: 12, fontWeight: 'bold', color: '#3E2723' },
   totalRow: {
     borderTopWidth: 1,
     borderTopColor: '#E0D6CE',
-    paddingTop: 8,
+    paddingTop: 6,
     marginTop: 4,
   },
-  totalLabel: { fontSize: 15, fontWeight: 'bold', color: '#3E2723' },
-  totalVal: { fontSize: 17, fontWeight: 'bold', color: '#D84315' },
+  totalLabel: { fontSize: 14, fontWeight: 'bold', color: '#3E2723' },
+  totalVal: { fontSize: 16, fontWeight: 'bold', color: '#D84315' },
   bottomCheckoutBar: {
     position: 'absolute',
     bottom: 0,
@@ -943,18 +872,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: '#E0D6CE',
-    elevation: 10,
+    elevation: 8,
   },
-  bottomTotalLabel: { fontSize: 12, color: '#757575' },
-  bottomTotalPrice: { fontSize: 18, fontWeight: 'bold', color: '#D84315' },
+  bottomTotalLabel: { fontSize: 11, color: '#757575' },
+  bottomTotalPrice: { fontSize: 17, fontWeight: 'bold', color: '#D84315' },
   checkoutBtn: {
     backgroundColor: '#D84315',
     paddingHorizontal: 20,
-    paddingVertical: 13,
-    borderRadius: 10,
+    paddingVertical: 11,
+    borderRadius: 8,
   },
   checkoutBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
   modalOverlay: {
@@ -967,64 +896,64 @@ const styles = StyleSheet.create({
   qrModalCard: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 14,
+    padding: 16,
     alignItems: 'center',
-    elevation: 8,
+    elevation: 6,
   },
-  qrModalTitle: { fontSize: 18, fontWeight: 'bold', color: '#1565C0' },
+  qrModalTitle: { fontSize: 16, fontWeight: 'bold', color: '#1565C0' },
   qrModalSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#616161',
     textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 10,
+    marginTop: 2,
+    marginBottom: 8,
   },
   timerBadge: {
     backgroundColor: '#FFF8E1',
     borderWidth: 1,
     borderColor: '#FFB300',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+    marginBottom: 10,
   },
-  timerText: { fontSize: 14, fontWeight: 'bold', color: '#E65100' },
+  timerText: { fontSize: 12, fontWeight: 'bold', color: '#E65100' },
   qrImageWrapper: {
-    width: 230,
-    height: 230,
+    width: 210,
+    height: 210,
     backgroundColor: '#FAFAFA',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E0E0E0',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 6,
+    padding: 4,
   },
   qrImage: { width: '100%', height: '100%' },
   bankInfoBox: {
     width: '100%',
     backgroundColor: '#F5F9FF',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 12,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
     borderWidth: 1,
     borderColor: '#BBDEFB',
   },
-  bankInfoLine: { fontSize: 13, color: '#333', marginBottom: 4 },
+  bankInfoLine: { fontSize: 12, color: '#333', marginBottom: 2 },
   boldText: { fontWeight: 'bold' },
   confirmPaidBtn: {
     width: '100%',
     backgroundColor: '#2E7D32',
-    paddingVertical: 13,
-    borderRadius: 10,
+    paddingVertical: 11,
+    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 14,
-  },
-  confirmPaidBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
-  cancelQrBtn: {
     marginTop: 12,
-    paddingVertical: 8,
   },
-  cancelQrBtnText: { color: '#D32F2F', fontSize: 13, fontWeight: 'bold' },
+  confirmPaidBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
+  cancelQrBtn: {
+    marginTop: 8,
+    paddingVertical: 6,
+  },
+  cancelQrBtnText: { color: '#D32F2F', fontSize: 12, fontWeight: 'bold' },
 });
