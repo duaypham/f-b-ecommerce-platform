@@ -37,6 +37,7 @@ export default function CartScreen({ navigation }) {
 
   const [voucherInput, setVoucherInput] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState(null);
+  const [voucherFeedback, setVoucherFeedback] = useState('');
 
   const [loadingGps, setLoadingGps] = useState(false);
   const [showVirtualMap, setShowVirtualMap] = useState(false);
@@ -147,19 +148,24 @@ export default function CartScreen({ navigation }) {
   const totalAmount = Math.max(0, subTotal - discountAmount);
   const formatCurrency = (val) => `${Number(val || 0).toLocaleString('vi-VN')}đ`;
 
+  // Áp dụng mã giảm giá trực tiếp KHÔNG bật popup Alert
   const handleApplyVoucherCode = (codeToApply) => {
     const cleanCode = (codeToApply || voucherInput).trim().toUpperCase();
     if (!cleanCode) {
-      Alert.alert('Thông báo', 'Vui lòng nhập mã giảm giá!');
+      setVoucherFeedback('Vui lòng nhập hoặc chọn mã giảm giá.');
       return;
     }
 
-    // Chặn nếu tài khoản đã từng sử dụng mã này
+    // Nếu bấm lại vào chính mã đang áp dụng -> Hủy chọn mã đó
+    if (appliedVoucher?.code?.toUpperCase() === cleanCode && codeToApply) {
+      setAppliedVoucher(null);
+      setVoucherInput('');
+      setVoucherFeedback('');
+      return;
+    }
+
     if (usedVoucherCodes.includes(cleanCode)) {
-      Alert.alert(
-        'Mã đã sử dụng',
-        `Bạn đã dùng mã "${cleanCode}" ở đơn hàng trước. Mỗi tài khoản chỉ được sử dụng mỗi mã 1 lần!`
-      );
+      setVoucherFeedback(`Mã "${cleanCode}" đã được sử dụng ở đơn hàng trước.`);
       return;
     }
 
@@ -168,31 +174,29 @@ export default function CartScreen({ navigation }) {
     );
 
     if (!found) {
-      Alert.alert('Không hợp lệ', 'Mã không tồn tại hoặc đã hết hạn!');
+      setVoucherFeedback('Mã giảm giá không tồn tại hoặc đã hết hạn.');
       return;
     }
 
     const eligibleAmount = getEligibleSubTotalForVoucher(found);
 
     if (found.store_id && eligibleAmount === 0) {
-      Alert.alert(
-        'Không khớp cửa hàng',
-        `Mã này chỉ áp dụng cho các món của quán "${found.storeName || '#' + found.store_id}". Giỏ hàng của bạn hiện không có món nào của quán này!`
+      setVoucherFeedback(
+        `Mã này chỉ áp dụng cho món của quán "${found.storeName || '#' + found.store_id}".`
       );
       return;
     }
 
     if (eligibleAmount < found.minOrder) {
-      Alert.alert(
-        'Chưa đủ điều kiện',
-        `Đơn tối thiểu từ ${formatCurrency(found.minOrder)}. Hiện tại mới đạt ${formatCurrency(eligibleAmount)}.`
+      setVoucherFeedback(
+        `Chưa đủ điều kiện: Đơn tối thiểu từ ${formatCurrency(found.minOrder)} (hiện tại ${formatCurrency(eligibleAmount)}).`
       );
       return;
     }
 
     setAppliedVoucher(found);
     setVoucherInput(found.code);
-    Alert.alert('Thành công', `Đã áp dụng mã: ${found.code}`);
+    setVoucherFeedback('');
   };
 
   const handleGetRealGPS = async () => {
@@ -258,6 +262,7 @@ export default function CartScreen({ navigation }) {
     if (res.success) {
       setAppliedVoucher(null);
       setVoucherInput('');
+      setVoucherFeedback('');
       Alert.alert(
         'Đặt hàng thành công',
         `Mã đơn: #${res.orderCode}\nCửa hàng đang chuẩn bị món cho bạn!`,
@@ -332,7 +337,6 @@ export default function CartScreen({ navigation }) {
     return `https://img.vietqr.io/image/MB-0987654321-compact2.png?amount=${totalAmount}&addInfo=${addInfo}&accountName=${accName}`;
   }, [totalAmount, pendingOrderCode]);
 
-  // XỬ LÝ KHI GIỎ HÀNG TRỐNG
   if (cart.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -345,7 +349,7 @@ export default function CartScreen({ navigation }) {
           style={styles.goHomeBtn}
           onPress={() => {
             if (navigation.canGoBack()) {
-              navigation.popToTop(); // Xả sạch stack và quay về Home gốc
+              navigation.popToTop();
             } else {
               navigation.replace('Home');
             }
@@ -428,16 +432,44 @@ export default function CartScreen({ navigation }) {
               style={styles.voucherInput}
               placeholder="Nhập mã ưu đãi..."
               value={voucherInput}
-              onChangeText={setVoucherInput}
+              onChangeText={(txt) => {
+                setVoucherInput(txt);
+                if (voucherFeedback) setVoucherFeedback('');
+              }}
               autoCapitalize="characters"
             />
-            <TouchableOpacity
-              style={styles.applyVoucherBtn}
-              onPress={() => handleApplyVoucherCode(voucherInput)}
-            >
-              <Text style={styles.applyVoucherText}>Áp dụng</Text>
-            </TouchableOpacity>
+            {appliedVoucher && discountAmount > 0 ? (
+              <TouchableOpacity
+                style={[styles.applyVoucherBtn, { backgroundColor: '#C62828' }]}
+                onPress={() => {
+                  setAppliedVoucher(null);
+                  setVoucherInput('');
+                  setVoucherFeedback('');
+                }}
+              >
+                <Text style={styles.applyVoucherText}>Bỏ mã</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.applyVoucherBtn}
+                onPress={() => handleApplyVoucherCode(voucherInput)}
+              >
+                <Text style={styles.applyVoucherText}>Áp dụng</Text>
+              </TouchableOpacity>
+            )}
           </View>
+
+          {voucherFeedback ? (
+            <Text style={styles.voucherErrorText}>{voucherFeedback}</Text>
+          ) : null}
+
+          {appliedVoucher && discountAmount > 0 ? (
+            <View style={styles.appliedBanner}>
+              <Text style={styles.appliedBannerText}>
+                ✅ Đang áp dụng mã <Text style={{ fontWeight: 'bold' }}>{appliedVoucher.code}</Text>: Giảm {formatCurrency(discountAmount)} (Từ {formatCurrency(subTotal)} còn {formatCurrency(totalAmount)})
+              </Text>
+            </View>
+          ) : null}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {availableVouchersForCart.length === 0 ? (
@@ -463,7 +495,9 @@ export default function CartScreen({ navigation }) {
                     <Text style={styles.voucherScopeBadge}>
                       {v.store_id ? v.storeName : 'Toàn sàn'}
                     </Text>
-                    <Text style={styles.voucherCodeText}>{v.code}</Text>
+                    <Text style={styles.voucherCodeText}>
+                      {v.code} {isSelected ? '✓' : ''}
+                    </Text>
                     <Text style={styles.voucherDescText} numberOfLines={2}>
                       {v.title}
                     </Text>
@@ -587,12 +621,12 @@ export default function CartScreen({ navigation }) {
 
           <View style={styles.summaryBox}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Tạm tính:</Text>
+              <Text style={styles.summaryLabel}>Giá gốc (Tạm tính):</Text>
               <Text style={styles.summaryVal}>{formatCurrency(subTotal)}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>
-                Giảm giá {appliedVoucher ? `(${appliedVoucher.code})` : ''}:
+                Giảm giá {appliedVoucher && discountAmount > 0 ? `(${appliedVoucher.code})` : ''}:
               </Text>
               <Text style={[styles.summaryVal, { color: '#2E7D32' }]}>
                 -{formatCurrency(discountAmount)}
@@ -600,7 +634,14 @@ export default function CartScreen({ navigation }) {
             </View>
             <View style={[styles.summaryRow, styles.totalRow]}>
               <Text style={styles.totalLabel}>Tổng thanh toán:</Text>
-              <Text style={styles.totalVal}>{formatCurrency(totalAmount)}</Text>
+              <View style={styles.priceComparisonWrap}>
+                {discountAmount > 0 && (
+                  <Text style={styles.originalStrikePrice}>
+                    {formatCurrency(subTotal)}
+                  </Text>
+                )}
+                <Text style={styles.totalVal}>{formatCurrency(totalAmount)}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -608,8 +649,19 @@ export default function CartScreen({ navigation }) {
 
       <View style={styles.bottomCheckoutBar}>
         <View>
-          <Text style={styles.bottomTotalLabel}>Tổng cộng</Text>
-          <Text style={styles.bottomTotalPrice}>{formatCurrency(totalAmount)}</Text>
+          <Text style={styles.bottomTotalLabel}>
+            {discountAmount > 0
+              ? `Giá sau giảm (-${formatCurrency(discountAmount)})`
+              : 'Tổng cộng'}
+          </Text>
+          <View style={styles.priceComparisonWrap}>
+            {discountAmount > 0 && (
+              <Text style={styles.bottomOriginalStrike}>
+                {formatCurrency(subTotal)}
+              </Text>
+            )}
+            <Text style={styles.bottomTotalPrice}>{formatCurrency(totalAmount)}</Text>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -674,6 +726,11 @@ export default function CartScreen({ navigation }) {
               </Text>
               <Text style={styles.bankInfoLine}>
                 Số tiền:{' '}
+                {discountAmount > 0 && (
+                  <Text style={styles.originalStrikePrice}>
+                    {formatCurrency(subTotal)}{' '}
+                  </Text>
+                )}
                 <Text style={[styles.boldText, { color: '#D84315', fontSize: 15 }]}>
                   {formatCurrency(totalAmount)}
                 </Text>
@@ -792,7 +849,7 @@ const styles = StyleSheet.create({
   qtyText: { fontSize: 13, fontWeight: 'bold', color: '#3E2723' },
   removeBtn: { marginLeft: 4, padding: 4 },
   removeBtnText: { fontSize: 14 },
-  voucherInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  voucherInputRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   voucherInput: {
     flex: 1,
     backgroundColor: '#FAF7F5',
@@ -810,6 +867,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   applyVoucherText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  voucherErrorText: {
+    fontSize: 11,
+    color: '#C62828',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  appliedBanner: {
+    backgroundColor: '#E8F5E9',
+    borderWidth: 1,
+    borderColor: '#81C784',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  appliedBannerText: {
+    fontSize: 12,
+    color: '#2E7D32',
+  },
   voucherTicket: {
     backgroundColor: '#FFF8F0',
     borderWidth: 1,
@@ -892,6 +968,7 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 4,
   },
   summaryLabel: { fontSize: 12, color: '#616161' },
@@ -903,6 +980,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   totalLabel: { fontSize: 14, fontWeight: 'bold', color: '#3E2723' },
+  priceComparisonWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  originalStrikePrice: {
+    fontSize: 13,
+    color: '#9E9E9E',
+    textDecorationLine: 'line-through',
+  },
   totalVal: { fontSize: 16, fontWeight: 'bold', color: '#D84315' },
   bottomCheckoutBar: {
     position: 'absolute',
@@ -920,6 +1007,11 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   bottomTotalLabel: { fontSize: 11, color: '#757575' },
+  bottomOriginalStrike: {
+    fontSize: 13,
+    color: '#9E9E9E',
+    textDecorationLine: 'line-through',
+  },
   bottomTotalPrice: { fontSize: 17, fontWeight: 'bold', color: '#D84315' },
   checkoutBtn: {
     backgroundColor: '#D84315',

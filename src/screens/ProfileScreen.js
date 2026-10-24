@@ -211,15 +211,6 @@ export default function ProfileScreen({ navigation }) {
         )}
       </View>
 
-      <View style={styles.groupCard}>
-        <Text style={styles.sectionTitle}>Đề tài 9: Đặt trà sữa & cà phê</Text>
-        <View style={styles.memberBox}>
-          <Text style={styles.memberTitle}>Thành viên thực hiện:</Text>
-          <Text style={styles.memberItem}>• Hồ Nhân Kiệt</Text>
-          <Text style={styles.memberItem}>• Phạm Ngọc Duy</Text>
-        </View>
-      </View>
-
       <View style={styles.formCard}>
         <Text style={styles.sectionTitle}>Thông tin cá nhân</Text>
 
@@ -386,16 +377,6 @@ const styles = StyleSheet.create({
   },
   switchBtnText: { fontSize: 12, fontWeight: 'bold' },
   switchSubText: { fontSize: 11, color: '#616161', marginTop: 1 },
-  groupCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    elevation: 2,
-  },
-  memberBox: { marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#F0EAE4' },
-  memberTitle: { fontSize: 12, fontWeight: 'bold', color: '#3E2723' },
-  memberItem: { fontSize: 12, color: '#0284c7', fontWeight: '600', marginTop: 2 },
   formCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,

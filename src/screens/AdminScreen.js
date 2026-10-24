@@ -502,7 +502,7 @@ export default function AdminScreen({ navigation }) {
           onPress={() => setActiveTab('orders')}
         >
           <Text style={[styles.tabText, activeTab === 'orders' && styles.tabTextActive]}>
-            Đơn hàng ({managedOrders.length})
+            Đơn ({managedOrders.length})
           </Text>
         </TouchableOpacity>
 
@@ -514,6 +514,17 @@ export default function AdminScreen({ navigation }) {
             Voucher ({managedVouchers.length})
           </Text>
         </TouchableOpacity>
+
+        {isAdmin && (
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'warnings' && styles.tabItemActive]}
+            onPress={() => setActiveTab('warnings')}
+          >
+            <Text style={[styles.tabText, activeTab === 'warnings' && styles.tabTextActive]}>
+              Cảnh cáo ({warnings.length})
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
@@ -609,46 +620,29 @@ export default function AdminScreen({ navigation }) {
 
         {activeTab === 'products' && (
           <View>
-            {storeWarnings.length > 0 && (
+            {isVendor && storeWarnings.length > 0 && (
               <View style={[styles.card, { borderColor: '#FFB300', borderWidth: 1.5 }]}>
                 <Text style={[styles.sectionTitle, { color: '#D84315' }]}>
-                  {isAdmin
-                    ? `Lịch sử đã cảnh cáo các quán (${storeWarnings.length})`
-                    : `Thông báo cảnh cáo cần khắc phục (${storeWarnings.length})`}
+                  Thông báo cảnh cáo cần khắc phục ({storeWarnings.length})
                 </Text>
                 {storeWarnings.map((w) => {
-                  const targetStoreName =
-                    stores.find((s) => Number(s.id) === Number(w.store_id))?.storeName ||
-                    `Quán #${w.store_id}`;
                   const resolved = Boolean(Number(w.isResolved));
-
                   return (
-                    <View
-                      key={w.id}
-                      style={[
-                        styles.warningItem,
-                        resolved && { backgroundColor: '#E8F5E9' },
-                      ]}
-                    >
+                    <View key={w.id} style={styles.warningItem}>
                       <View style={{ flex: 1 }}>
-                        {isAdmin && (
-                          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4E342E' }}>
-                            🏪 Gửi tới: {targetStoreName}
-                          </Text>
-                        )}
                         <Text style={styles.warningTitle}>Món: {w.product_name}</Text>
                         <Text style={styles.warningMsg}>{w.message}</Text>
                         <Text
                           style={[
                             styles.warningMeta,
-                            { color: resolved ? '#2E7D32' : '#D84315', fontWeight: 'bold' },
+                            { color: '#D84315', fontWeight: 'bold' },
                           ]}
                         >
-                          {resolved ? '✅ Cửa hàng đã khắc phục' : '⏳ Chưa xử lý'}
+                          ⏳ Chưa xử lý
                         </Text>
                       </View>
 
-                      {isVendor && !resolved && (
+                      {!resolved && (
                         <TouchableOpacity
                           style={styles.resolveBtn}
                           onPress={() => resolveStoreWarning(w.id)}
@@ -1084,6 +1078,53 @@ export default function AdminScreen({ navigation }) {
             </View>
           </View>
         )}
+
+        {activeTab === 'warnings' && isAdmin && (
+          <View style={styles.card}>
+            <Text style={[styles.sectionTitle, { color: '#D84315' }]}>
+              Lịch sử lưu trữ cảnh cáo các quán ({warnings.length})
+            </Text>
+
+            {warnings.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: '#757575', paddingVertical: 20 }}>
+                Chưa có lịch sử cảnh cáo nào được gửi đi.
+              </Text>
+            ) : (
+              warnings.map((w) => {
+                const targetStoreName =
+                  stores.find((s) => Number(s.id) === Number(w.store_id))?.storeName ||
+                  `Quán #${w.store_id}`;
+                const resolved = Boolean(Number(w.isResolved));
+
+                return (
+                  <View
+                    key={w.id}
+                    style={[
+                      styles.warningItem,
+                      resolved && { backgroundColor: '#E8F5E9' },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4E342E' }}>
+                        🏪 Gửi tới: {targetStoreName}
+                      </Text>
+                      <Text style={styles.warningTitle}>Món: {w.product_name}</Text>
+                      <Text style={styles.warningMsg}>{w.message}</Text>
+                      <Text
+                        style={[
+                          styles.warningMeta,
+                          { color: resolved ? '#2E7D32' : '#D84315', fontWeight: 'bold' },
+                        ]}
+                      >
+                        {resolved ? '✅ Cửa hàng đã khắc phục' : '⏳ Chưa xử lý'}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
       </ScrollView>
 
       <Modal
@@ -1169,7 +1210,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabItemActive: { borderBottomColor: '#D84315' },
-  tabText: { fontSize: 11, fontWeight: '600', color: '#7D6E63' },
+  tabText: { fontSize: 10.5, fontWeight: '600', color: '#7D6E63' },
   tabTextActive: { color: '#D84315', fontWeight: 'bold' },
   scrollContent: { padding: 14, paddingBottom: 40 },
   statsGrid: { gap: 10, marginBottom: 14 },
