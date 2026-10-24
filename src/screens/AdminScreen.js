@@ -92,7 +92,9 @@ export default function AdminScreen({ navigation }) {
 
   const storeWarnings = useMemo(() => {
     if (isAdmin) return warnings;
-    return warnings.filter((w) => Number(w.store_id) === Number(vendorStoreId));
+    return warnings.filter(
+      (w) => Number(w.store_id) === Number(vendorStoreId) && !Boolean(Number(w.isResolved))
+    );
   }, [warnings, isAdmin, vendorStoreId]);
 
   const shipperAvailableOrders = useMemo(() => {
@@ -610,28 +612,53 @@ export default function AdminScreen({ navigation }) {
             {storeWarnings.length > 0 && (
               <View style={[styles.card, { borderColor: '#FFB300', borderWidth: 1.5 }]}>
                 <Text style={[styles.sectionTitle, { color: '#D84315' }]}>
-                  Thông báo cảnh cáo ({storeWarnings.length})
+                  {isAdmin
+                    ? `Lịch sử đã cảnh cáo các quán (${storeWarnings.length})`
+                    : `Thông báo cảnh cáo cần khắc phục (${storeWarnings.length})`}
                 </Text>
-                {storeWarnings.map((w) => (
-                  <View key={w.id} style={styles.warningItem}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.warningTitle}>Món: {w.product_name}</Text>
-                      <Text style={styles.warningMsg}>{w.message}</Text>
-                      <Text style={styles.warningMeta}>
-                        {w.isResolved ? 'Đã khắc phục' : 'Chưa xử lý'}
-                      </Text>
-                    </View>
+                {storeWarnings.map((w) => {
+                  const targetStoreName =
+                    stores.find((s) => Number(s.id) === Number(w.store_id))?.storeName ||
+                    `Quán #${w.store_id}`;
+                  const resolved = Boolean(Number(w.isResolved));
 
-                    {isVendor && !w.isResolved && (
-                      <TouchableOpacity
-                        style={styles.resolveBtn}
-                        onPress={() => resolveStoreWarning(w.id)}
-                      >
-                        <Text style={styles.resolveBtnText}>Đã sửa</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
+                  return (
+                    <View
+                      key={w.id}
+                      style={[
+                        styles.warningItem,
+                        resolved && { backgroundColor: '#E8F5E9' },
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        {isAdmin && (
+                          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4E342E' }}>
+                            🏪 Gửi tới: {targetStoreName}
+                          </Text>
+                        )}
+                        <Text style={styles.warningTitle}>Món: {w.product_name}</Text>
+                        <Text style={styles.warningMsg}>{w.message}</Text>
+                        <Text
+                          style={[
+                            styles.warningMeta,
+                            { color: resolved ? '#2E7D32' : '#D84315', fontWeight: 'bold' },
+                          ]}
+                        >
+                          {resolved ? '✅ Cửa hàng đã khắc phục' : '⏳ Chưa xử lý'}
+                        </Text>
+                      </View>
+
+                      {isVendor && !resolved && (
+                        <TouchableOpacity
+                          style={styles.resolveBtn}
+                          onPress={() => resolveStoreWarning(w.id)}
+                        >
+                          <Text style={styles.resolveBtnText}>Đã sửa</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             )}
 

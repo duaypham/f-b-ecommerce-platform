@@ -21,6 +21,7 @@ export default function CartScreen({ navigation }) {
     currentUser,
     cart,
     vouchers,
+    orders,
     updateCartQuantity,
     removeFromCart,
     clearCart,
@@ -98,6 +99,34 @@ export default function CartScreen({ navigation }) {
       .reduce((sum, item) => sum + item.totalPrice, 0);
   };
 
+  const usedVoucherCodes = useMemo(() => {
+    if (!currentUser) return [];
+    return orders
+      .filter(
+        (o) =>
+          o.username === currentUser.username &&
+          o.status !== 'Đã hủy' &&
+          o.voucherCode
+      )
+      .map((o) => String(o.voucherCode).toUpperCase());
+  }, [orders, currentUser]);
+
+  const availableVouchersForCart = useMemo(() => {
+    const storeIdsInCart = [...new Set(cart.map((item) => Number(item.storeId)))];
+
+    return vouchers.filter((v) => {
+      if (!v.isActive) return false;
+
+      if (usedVoucherCodes.includes(String(v.code).toUpperCase())) {
+        return false;
+      }
+
+      if (!v.store_id) return true;
+
+      return storeIdsInCart.includes(Number(v.store_id));
+    });
+  }, [vouchers, cart, usedVoucherCodes]);
+
   const discountAmount = useMemo(() => {
     if (!appliedVoucher) return 0;
     const targetSubTotal = getEligibleSubTotalForVoucher(appliedVoucher);
@@ -125,6 +154,15 @@ export default function CartScreen({ navigation }) {
       return;
     }
 
+    // Chặn nếu tài khoản đã từng sử dụng mã này
+    if (usedVoucherCodes.includes(cleanCode)) {
+      Alert.alert(
+        'Mã đã sử dụng',
+        `Bạn đã dùng mã "${cleanCode}" ở đơn hàng trước. Mỗi tài khoản chỉ được sử dụng mỗi mã 1 lần!`
+      );
+      return;
+    }
+
     const found = vouchers.find(
       (v) => v.code.toUpperCase() === cleanCode && v.isActive
     );
@@ -138,8 +176,8 @@ export default function CartScreen({ navigation }) {
 
     if (found.store_id && eligibleAmount === 0) {
       Alert.alert(
-        'Thông báo',
-        `Mã này chỉ áp dụng cho món của quán "${found.storeName || '#' + found.store_id}".`
+        'Không khớp cửa hàng',
+        `Mã này chỉ áp dụng cho các món của quán "${found.storeName || '#' + found.store_id}". Giỏ hàng của bạn hiện không có món nào của quán này!`
       );
       return;
     }
@@ -402,9 +440,12 @@ export default function CartScreen({ navigation }) {
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {vouchers
-              .filter((v) => v.isActive)
-              .map((v) => {
+            {availableVouchersForCart.length === 0 ? (
+              <Text style={{ fontSize: 12, color: '#757575', fontStyle: 'italic', paddingVertical: 6 }}>
+                Không có mã giảm giá khả dụng hoặc bạn đã dùng hết các mã cho món này.
+              </Text>
+            ) : (
+              availableVouchersForCart.map((v) => {
                 const isSelected = appliedVoucher?.code === v.code && discountAmount > 0;
                 const eligibleAmt = getEligibleSubTotalForVoucher(v);
                 const eligible = eligibleAmt >= v.minOrder && eligibleAmt > 0;
@@ -431,7 +472,8 @@ export default function CartScreen({ navigation }) {
                     </Text>
                   </TouchableOpacity>
                 );
-              })}
+              })
+            )}
           </ScrollView>
         </View>
 
