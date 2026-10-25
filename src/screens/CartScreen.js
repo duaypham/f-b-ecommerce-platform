@@ -269,7 +269,11 @@ export default function CartScreen({ navigation }) {
         [
           {
             text: 'Xem đơn hàng',
-            onPress: () => navigation.replace('OrderHistory'),
+            onPress: () =>
+              navigation.reset({
+                index: 1,
+                routes: [{ name: 'Home' }, { name: 'OrderHistory' }],
+              }),
           },
         ]
       );
@@ -384,7 +388,7 @@ export default function CartScreen({ navigation }) {
                 <Text style={styles.itemStore}>{item.storeName}</Text>
                 <Text style={styles.itemName}>{item.name}</Text>
                 <Text style={styles.itemOptions}>
-                  Size {item.size} • {item.sugar} đường • {item.ice}
+                  Size {item.size} • {item.sugar} • {item.ice}
                 </Text>
                 {item.toppings && item.toppings.length > 0 && (
                   <Text style={styles.itemToppings}>

@@ -37,8 +37,8 @@ export default function ProductDetailScreen({ route, navigation }) {
   }, [products, initialProduct]);
 
   const [selectedSize, setSelectedSize] = useState(SIZES[0]);
-  const [selectedSugar, setSelectedSugar] = useState('100%');
-  const [selectedIce, setSelectedIce] = useState('100% đá');
+  const [selectedSugar, setSelectedSugar] = useState('Có đường');
+  const [selectedIce, setSelectedIce] = useState('Có đá');
   const [selectedToppings, setSelectedToppings] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
@@ -105,8 +105,8 @@ export default function ProductDetailScreen({ route, navigation }) {
     });
 
     Alert.alert('Thành công', `Đã thêm ${quantity}x ${product.name} vào giỏ hàng.`, [
-      { text: 'Chọn tiếp', style: 'cancel' },
-      { text: 'Xem giỏ hàng', onPress: () => navigation.navigate('Cart') },
+      { text: 'Chọn tiếp', onPress: () => navigation.goBack() },
+      { text: 'Xem giỏ hàng', onPress: () => navigation.replace('Cart') },
     ]);
   };
 
@@ -220,7 +220,7 @@ export default function ProductDetailScreen({ route, navigation }) {
                   onPress={() => setSelectedSugar(sg)}
                 >
                   <Text style={[styles.optionChipText, active && styles.optionChipTextActive]}>
-                    {sg} đường
+                    {sg}
                   </Text>
                 </TouchableOpacity>
               );

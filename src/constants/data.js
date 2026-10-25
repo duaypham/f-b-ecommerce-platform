@@ -12,10 +12,8 @@ export const SIZES = [
   { id: 'L', label: 'Size L', price: 10000 },
 ];
 
-export const SUGAR_LEVELS = ['0%', '30%', '50%', '70%', '100%'];
-
-export const ICE_LEVELS = ['Không đá', '30% đá', '70% đá', '100% đá'];
-
+export const SUGAR_LEVELS = ['Không đường', 'Ít đường', 'Có đường'];
+export const ICE_LEVELS = ['Không đá', 'Có đá', 'Nhiều đá'];
 export const TOPPINGS = [
   { id: 't1', name: 'Trân châu đường đen', price: 5000 },
   { id: 't2', name: 'Trân châu trắng giòn', price: 5000 },
