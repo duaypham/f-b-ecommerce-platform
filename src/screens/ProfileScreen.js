@@ -165,7 +165,7 @@ export default function ProfileScreen({ navigation }) {
 
         {currentUser.store && (
           <Text style={styles.storeInfoText}>
-            Quán: {currentUser.store.storeName} • Chiết khấu sàn: 10%
+            Quán: {currentUser.store.storeName}
           </Text>
         )}
       </View>
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   roleBadgeText: { fontSize: 11, fontWeight: 'bold', color: '#5D4037' },
-  storeInfoText: { fontSize: 12, color: '#E65100', fontWeight: '600', marginTop: 6 },
+  storeInfoText: { fontSize: 13, color: '#6F4E37', fontWeight: '600', marginTop: 6 },
   switchCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,

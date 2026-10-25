@@ -201,7 +201,7 @@ export default function OrderHistoryScreen({ navigation }) {
                   {prod.quantity}x {prod.name} (Size {prod.size})
                 </Text>
                 <Text style={styles.itemSub}>
-                  {prod.sugar} đường • {prod.ice}
+                  {prod.sugar} • {prod.ice}
                   {prod.toppings && prod.toppings.length > 0
                     ? ` • +${prod.toppings.join(', ')}`
                     : ''}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -38,6 +38,26 @@ export default function AdminScreen({ navigation }) {
   const isVendor = role === 'vendor';
   const isShipper = role === 'shipper';
   const vendorStoreId = currentUser?.store?.id || 1;
+  
+  // Đổi tiêu đề và màu thanh header chuẩn theo từng vai trò
+    useLayoutEffect(() => {
+      let title = 'Quản trị hệ thống sàn';
+      let headerBg = '#6F4E37'; // Màu nâu mặc định của sàn
+
+      if (isVendor) {
+        title = currentUser?.store?.storeName 
+          ? `Quản lý: ${currentUser.store.storeName}` 
+          : 'Quản lý cửa hàng';
+      } else if (isShipper) {
+        title = 'Trung tâm giao hàng';
+        headerBg = '#0D47A1'; // Đổi sang màu xanh dương đồng bộ với tài xế
+      }
+
+      navigation.setOptions({
+        title: title,
+        headerStyle: { backgroundColor: headerBg },
+      });
+    }, [navigation, isVendor, isShipper, currentUser]);
 
   const [activeTab, setActiveTab] = useState('stats');
   const [shipperTab, setShipperTab] = useState('available');

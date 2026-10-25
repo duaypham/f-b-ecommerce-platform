@@ -67,7 +67,7 @@ export default function App() {
             name="Admin"
             component={AdminScreen}
             options={{ title: 'Quản trị Cửa hàng & Sàn' }}
-          />
+          />  
         </Stack.Navigator>
       </NavigationContainer>
     </AppProvider>
