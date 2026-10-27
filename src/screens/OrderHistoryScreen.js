@@ -146,7 +146,7 @@ export default function OrderHistoryScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Thanh tiến trình 4 bước (Quán chuẩn bị -> Chờ Shipper -> Đang giao -> Hoàn tất) */}
+        {/* Thanh tiến trình 4 bước */}
         {!isCancelled && (
           <View style={styles.timelineContainer}>
             {ORDER_STATUS_STEPS.map((step, idx) => {
@@ -176,7 +176,7 @@ export default function OrderHistoryScreen({ navigation }) {
           </View>
         )}
 
-        {/* Thông tin Tài xế giao hàng (nếu đã có Shipper nhận đơn) */}
+        {/* Thông tin Tài xế giao hàng */}
         {order.shipperName ? (
           <View style={styles.shipperBanner}>
             <Text style={styles.shipperBannerText}>
@@ -265,7 +265,7 @@ export default function OrderHistoryScreen({ navigation }) {
             style={styles.reOrderBtn}
             onPress={() => handleReOrder(order.items)}
           >
-            <Text style={styles.reOrderBtnText}>🔄 Đặt lại đơn này</Text>
+            <Text style={styles.reOrderBtnText}>🔄 Đặt lại đơn</Text>
           </TouchableOpacity>
 
           {order.status === 'Đang chuẩn bị' &&
