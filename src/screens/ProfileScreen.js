@@ -67,21 +67,21 @@ export default function ProfileScreen({ navigation }) {
   }
 
   const handleGetRealGPS = async () => {
-    setLoadingGps(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Thông báo', 'Cần cấp quyền truy cập vị trí GPS.');
-        setLoadingGps(false);
-        return;
-      }
+  setLoadingGps(true);
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+      setLoadingGps(false);
+      return;
+    }
 
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const { latitude, longitude } = loc.coords;
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    const { latitude, longitude } = loc.coords;
 
-      const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
+    const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
       if (geo && geo.length > 0) {
         const place = geo[0];
         const formatted = [
@@ -93,12 +93,21 @@ export default function ProfileScreen({ navigation }) {
           .filter(Boolean)
           .join(', ');
 
-        setAddress(formatted || `Tọa độ (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+        if (
+          !formatted ||
+          formatted.includes('Mountain View') ||
+          formatted.includes('Amphitheatre') ||
+          formatted.includes('California')
+        ) {
+          setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+        } else {
+          setAddress(formatted);
+        }
       } else {
-        setAddress(`Tọa độ (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`);
+        setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
       }
     } catch (error) {
-      setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa');
+      setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
     } finally {
       setLoadingGps(false);
     }

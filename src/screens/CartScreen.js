@@ -146,9 +146,22 @@ export default function CartScreen({ navigation }) {
   }, [appliedVoucher, subTotal, cart]);
 
   const totalAmount = Math.max(0, subTotal - discountAmount);
+
+  useEffect(() => {
+  if (!appliedVoucher) return;
+  const eligibleAmt = getEligibleSubTotalForVoucher(appliedVoucher);
+  if (eligibleAmt < appliedVoucher.minOrder) {
+    const minStr = `${Number(appliedVoucher.minOrder).toLocaleString('vi-VN')}đ`;
+    setVoucherFeedback(
+      `Đã tự động gỡ mã ${appliedVoucher.code} do tổng món giảm xuống dưới ${minStr}.`
+    );
+    setAppliedVoucher(null);
+    setVoucherInput('');
+  }
+}, [subTotal, cart, appliedVoucher]);
+
   const formatCurrency = (val) => `${Number(val || 0).toLocaleString('vi-VN')}đ`;
 
-  // Áp dụng mã giảm giá trực tiếp KHÔNG bật popup Alert
   const handleApplyVoucherCode = (codeToApply) => {
     const cleanCode = (codeToApply || voucherInput).trim().toUpperCase();
     if (!cleanCode) {
@@ -226,9 +239,18 @@ export default function CartScreen({ navigation }) {
           .filter(Boolean)
           .join(', ');
 
-        setAddress(formatted || `Tọa độ (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+        if (
+          !formatted ||
+          formatted.includes('Mountain View') ||
+          formatted.includes('Amphitheatre') ||
+          formatted.includes('California')
+        ) {
+          setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+        } else {
+          setAddress(formatted);
+        }
       } else {
-        setAddress(`Tọa độ (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`);
+        setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
       }
     } catch (error) {
       setShowVirtualMap(true);
@@ -239,11 +261,13 @@ export default function CartScreen({ navigation }) {
 
   const submitFinalOrderToServer = async (generatedCode, paymentStatusLabel) => {
     const primaryStoreId = cart[0]?.storeId || 1;
+    const primaryStoreName = cart[0]?.storeName || 'Gong Cha Biên Hòa';
 
     setSubmittingOrder(true);
     const res = await createOrder({
       orderCode: generatedCode,
       store_id: primaryStoreId,
+      storeName: primaryStoreName,
       username: currentUser.username,
       customerName: customerName.trim(),
       phone: phone.trim(),

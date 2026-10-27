@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 23, 2026 at 08:46 AM
+-- Generation Time: Oct 27, 2026 at 02:09 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -55,10 +55,8 @@ CREATE TABLE `orders` (
 --
 
 INSERT INTO `orders` (`id`, `orderCode`, `store_id`, `username`, `customerName`, `phone`, `address`, `note`, `paymentMethod`, `paymentStatus`, `voucherCode`, `subTotal`, `discountAmount`, `platformFee`, `totalAmount`, `itemsJson`, `status`, `shipper_username`, `shipperName`, `createdAt`) VALUES
-(1, 'ORD171001', 1, 'khach1', 'Phạm Ngọc Duy', '0987654321', 'Đường Đồng Khởi, Biên Hòa, Đồng Nai', 'Giao giờ hành chính', 'COD', 'Đã thu tiền mặt', 'GIAM10K', 70000, 10000, 7000, 60000, '[{\"productId\":1,\"name\":\"Trà Sữa Trân Châu Đường Đen\",\"storeId\":1,\"storeName\":\"Gong Cha Biên Hòa\",\"size\":\"M\",\"sugar\":\"70%\",\"ice\":\"100%\",\"toppings\":[\"Trân châu đen\"],\"quantity\":2,\"unitPrice\":35000,\"totalPrice\":70000,\"image\":\"https://images.unsplash.com/photo-1558857563-b371033873b8?w=600\"}]', 'Hoàn tất', 'shipper1', 'Tài Xế Nguyễn Văn Giao', '2026-10-23 03:02:04'),
-(2, 'ORD171002', 1, 'khach1', 'Phạm Ngọc Duy', '0987654321', '120 Võ Thị Sáu, Biên Hòa, Đồng Nai', 'Ít đá giúp mình', 'Chuyển khoản QR', 'Đã thanh toán QR', NULL, 50000, 0, 5000, 50000, '[{\"productId\":2,\"name\":\"Trà Sữa Khoai Môn Kem Trứng\",\"storeId\":1,\"storeName\":\"Gong Cha Biên Hòa\",\"size\":\"S\",\"sugar\":\"70%\",\"ice\":\"70% đá\",\"toppings\":[],\"quantity\":1,\"unitPrice\":50000,\"totalPrice\":50000,\"image\":\"https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600\"}]', 'Hoàn tất', 'shipper1', 'Tài Xế Nguyễn Văn Giao', '2026-10-23 03:02:04'),
-(3, 'ORD626678', 2, 'khach1', 'Phạm Ngọc Duy', '0987654321', '1600, Amphitheatre Parkway, Santa Clara County, Mountain View', '', 'Chuyển khoản QR', 'Đã thanh toán qua VietQR', NULL, 29000, 0, 2900, 29000, '[{\"productId\":4,\"name\":\"Cà Phê Phin Sữa Đá Đậm Đà\",\"storeId\":2,\"storeName\":\"Highlands Coffee & Tea\",\"image\":\"https:\\/\\/images.unsplash.com\\/photo-1514432324607-a09d9b4aefdd?w=600\",\"size\":\"S\",\"sugar\":\"100%\",\"ice\":\"100% đá\",\"toppings\":[],\"quantity\":1,\"unitPrice\":29000,\"totalPrice\":29000,\"cartItemId\":\"1792734861546388c\",\"signature\":\"4_S_100%_100% đá_\"}]', 'Đã hủy', NULL, NULL, '2026-10-23 05:54:45'),
-(4, 'ORD554075', 1, 'khach1', 'Phạm Ngọc Duy', '0987654321', '1600, Amphitheatre Parkway, Santa Clara County, Mountain View', '', 'Chuyển khoản QR', 'Đã thanh toán qua VietQR', 'GIAM10K', 55000, 10000, 5500, 45000, '[{\"productId\":1,\"name\":\"Trà Sữa Trân Châu Đường Đen\",\"storeId\":1,\"storeName\":\"Gong Cha Biên Hòa\",\"image\":\"https:\\/\\/images.unsplash.com\\/photo-1558857563-b371033873b8?w=600\",\"size\":\"L\",\"sugar\":\"50%\",\"ice\":\"30% đá\",\"toppings\":[\"Kem phô mai Macchiato\"],\"quantity\":1,\"unitPrice\":55000,\"totalPrice\":55000,\"cartItemId\":\"1792737703811x4tg\",\"signature\":\"1_L_50%_30% đá_Kem phô mai Macchiato\"}]', 'Hoàn tất', 'shipper1', 'Tài Xế Nguyễn Văn Giao', '2026-10-23 06:42:20');
+(1, 'ORD171001', 1, 'khach1', 'Phạm Ngọc Duy', '0987654321', '255 Đồng Khởi, P. Tân Hiệp, TP. Biên Hòa, Đồng Nai', 'Giao giờ hành chính', 'COD', 'Đã thu tiền mặt', 'GIAM10K', 70000, 10000, 7000, 60000, '[{\"productId\":1,\"name\":\"Trà Sữa Trân Châu Đường Đen\",\"storeId\":1,\"storeName\":\"Gong Cha Biên Hòa\",\"size\":\"M\",\"sugar\":\"Vừa ngọt (70%)\",\"ice\":\"Đá chuẩn (100%)\",\"toppings\":[\"Trân châu đường đen\"],\"quantity\":2,\"unitPrice\":35000,\"totalPrice\":70000,\"image\":\"https://images.unsplash.com/photo-1558857563-b371033873b8?w=600\"}]', 'Hoàn tất', 'shipper1', 'Tài Xế Nguyễn Văn Giao', '2026-10-27 00:55:22'),
+(2, 'ORD171002', 1, 'khach1', 'Phạm Ngọc Duy', '0987654321', '120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai', 'Giao nhanh giúp mình', 'Chuyển khoản QR', 'Đã thanh toán qua QR', NULL, 50000, 0, 5000, 50000, '[{\"productId\":2,\"name\":\"Trà Sữa Khoai Môn Kem Trứng\",\"storeId\":1,\"storeName\":\"Gong Cha Biên Hòa\",\"size\":\"S\",\"sugar\":\"Ít ngọt (50%)\",\"ice\":\"Ít đá (50%)\",\"toppings\":[],\"quantity\":1,\"unitPrice\":50000,\"totalPrice\":50000,\"image\":\"https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600\"}]', 'Chờ tài xế nhận', NULL, NULL, '2026-10-27 00:55:22');
 
 -- --------------------------------------------------------
 
@@ -87,7 +85,7 @@ CREATE TABLE `products` (
 INSERT INTO `products` (`id`, `store_id`, `name`, `category`, `basePrice`, `discountPrice`, `image`, `description`, `isBestSeller`, `isAvailable`, `soldCount`) VALUES
 (1, 1, 'Trà Sữa Trân Châu Đường Đen', 'Trà sữa', 45000, 35000, 'https://images.unsplash.com/photo-1558857563-b371033873b8?w=600', 'Sữa tươi thanh trùng kết hợp trân châu nấu đường đen Hàn Quốc dẻo mềm.', 1, 1, 43),
 (2, 1, 'Trà Sữa Khoai Môn Kem Trứng', 'Trà sữa', 50000, 0, 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600', 'Khoai môn nghiền tươi béo ngậy phủ lớp kem trứng khè lửa thơm lừng.', 1, 1, 28),
-(3, 1, 'Trà Đào Cam Sả Đá Viên', 'Trà trái cây', 40000, 32000, 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=600', 'Hương vị thanh mát từ đào ngâm giòn, cam vàng và sả tươi.', 1, 1, 35),
+(3, 1, 'Trà Đào Cam Sả Đá Viên', 'Trà trái cây', 40000, 32000, 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=600', 'Hương vị thanh mát từ đào ngâm giòn, cam vàng và sả tươi.', 1, 1, 40),
 (4, 2, 'Cà Phê Phin Sữa Đá Đậm Đà', 'Cà phê', 35000, 29000, 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600', 'Hạt Robusta rang mộc pha phin truyền thống cùng sữa đặc ngọt dịu.', 1, 1, 51),
 (5, 2, 'Matcha Đá Xay Kem Tươi', 'Đá xay', 55000, 0, 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=600', 'Bột trà xanh Uji Nhật Bản xay nhuyễn cùng đá và lớp kem whipping béo mịn.', 0, 1, 15),
 (6, 2, 'Bạc Xỉu Kem Muối Biển', 'Cà phê', 42000, 0, 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=600', 'Sự hòa quyện giữa sữa tươi, cà phê nhẹ và lớp foam muối biển mặn ngọt.', 0, 0, 12);
@@ -166,7 +164,7 @@ INSERT INTO `users` (`id`, `username`, `password`, `fullName`, `phone`, `address
 (2, 'vendor1', '123456', 'Chủ Quán Gong Cha', '0912345678', '123 Võ Thị Sáu, Biên Hòa, Đồng Nai', 'vendor', '2026-10-23 03:02:04'),
 (3, 'vendor2', '123456', 'Chủ Quán Highlands', '0922334455', '456 Phạm Văn Thuận, Biên Hòa, Đồng Nai', 'vendor', '2026-10-23 03:02:04'),
 (4, 'shipper1', '123456', 'Tài Xế Nguyễn Văn Giao', '0933445566', 'Khu vực Biên Hòa, Đồng Nai', 'shipper', '2026-10-23 03:02:04'),
-(5, 'khach1', '123456', 'Phạm Ngọc Duy', '0987654321', '1600, Amphitheatre Parkway, Santa Clara County, Mountain View', 'customer', '2026-10-23 03:02:04');
+(5, 'khach1', '123456', 'Phạm Ngọc Duy', '0987654321', '120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai', 'customer', '2026-10-23 03:02:04');
 
 -- --------------------------------------------------------
 
@@ -217,7 +215,7 @@ CREATE TABLE `warnings` (
 --
 
 INSERT INTO `warnings` (`id`, `store_id`, `product_name`, `message`, `isResolved`, `createdAt`) VALUES
-(1, 1, 'Trà Đào Cam Sả Đá Viên', 'Nhắc nhở từ Admin Sàn: Vui lòng cập nhật lại mô tả nguồn gốc nguyên liệu rõ ràng hơn.', 1, '2026-10-23 03:02:04');
+(1, 1, 'Trà Đào Cam Sả Đá Viên', 'Nhắc nhở từ Admin Sàn: Vui lòng cập nhật lại mô tả nguồn gốc nguyên liệu rõ ràng hơn.', 0, '2026-10-23 03:02:04');
 
 --
 -- Indexes for dumped tables
@@ -279,19 +277,19 @@ ALTER TABLE `warnings`
 -- AUTO_INCREMENT for table `orders`
 --
 ALTER TABLE `orders`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `products`
 --
 ALTER TABLE `products`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `reviews`
 --
 ALTER TABLE `reviews`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `stores`
@@ -303,7 +301,7 @@ ALTER TABLE `stores`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `vouchers`
@@ -315,7 +313,7 @@ ALTER TABLE `vouchers`
 -- AUTO_INCREMENT for table `warnings`
 --
 ALTER TABLE `warnings`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- Constraints for dumped tables

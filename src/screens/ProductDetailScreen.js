@@ -37,8 +37,8 @@ export default function ProductDetailScreen({ route, navigation }) {
   }, [products, initialProduct]);
 
   const [selectedSize, setSelectedSize] = useState(SIZES[0]);
-  const [selectedSugar, setSelectedSugar] = useState('Có đường');
-  const [selectedIce, setSelectedIce] = useState('Có đá');
+  const [selectedSugar, setSelectedSugar] = useState(SUGAR_LEVELS[3]);
+  const [selectedIce, setSelectedIce] = useState(ICE_LEVELS[3]);
   const [selectedToppings, setSelectedToppings] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [refreshing, setRefreshing] = useState(false);

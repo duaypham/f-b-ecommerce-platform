@@ -442,15 +442,19 @@ export default function AdminScreen({ navigation }) {
       return;
     }
 
+    const numericVal = Number(vValue);
+    const numericMax =
+      vType === 'percent' ? Number(vMaxDiscount || 25000) : numericVal;
+
     const res = await saveVoucher({
       id: editingVoucherId,
       store_id: isVendor ? vendorStoreId : null,
       code: vCode.trim().toUpperCase(),
       title: vTitle.trim(),
       type: vType,
-      value: Number(vValue),
+      value: numericVal,
       minOrder: Number(vMinOrder || 0),
-      maxDiscount: Number(vMaxDiscount || vValue),
+      maxDiscount: numericMax,
       isActive: vActive,
     });
 
@@ -1038,6 +1042,19 @@ export default function AdminScreen({ navigation }) {
                   />
                 </View>
               </View>
+
+              {vType === 'percent' && (
+                <View style={{ marginTop: 4 }}>
+                  <Text style={styles.label}>Giảm tối đa (VNĐ)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="25000"
+                    keyboardType="numeric"
+                    value={vMaxDiscount}
+                    onChangeText={setVMaxDiscount}
+                  />
+                </View>
+              )}
 
               <View style={styles.formActionRow}>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleSaveVoucher}>

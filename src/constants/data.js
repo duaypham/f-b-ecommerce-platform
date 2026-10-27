@@ -12,8 +12,21 @@ export const SIZES = [
   { id: 'L', label: 'Size L', price: 10000 },
 ];
 
-export const SUGAR_LEVELS = ['Không đường', 'Ít đường', 'Có đường'];
-export const ICE_LEVELS = ['Không đá', 'Có đá', 'Nhiều đá'];
+// Chuẩn hóa 4 mức đường và 4 mức đá (Từ ngữ + %)
+export const SUGAR_LEVELS = [
+  'Không đường (0%)',
+  'Ít ngọt (50%)',
+  'Vừa ngọt (70%)',
+  'Ngọt chuẩn (100%)',
+];
+
+export const ICE_LEVELS = [
+  'Không đá (0%)',
+  'Ít đá (50%)',
+  'Vừa đá (70%)',
+  'Đá chuẩn (100%)',
+];
+
 export const TOPPINGS = [
   { id: 't1', name: 'Trân châu đường đen', price: 5000 },
   { id: 't2', name: 'Trân châu trắng giòn', price: 5000 },
@@ -54,6 +67,27 @@ export const VIRTUAL_MAP_LOCATIONS = [
     title: 'Khu vực Bửu Long',
     address: 'Đường Huỳnh Văn Nghệ, P. Bửu Long, TP. Biên Hòa, Đồng Nai',
     coords: { latitude: 10.9689, longitude: 106.8012 },
+  },
+];
+
+export const FALLBACK_STORES = [
+  {
+    id: 1,
+    vendor_username: 'vendor1',
+    storeName: 'Gong Cha Biên Hòa',
+    phone: '0912345678',
+    address: '123 Võ Thị Sáu, Biên Hòa',
+    commissionRate: 10,
+    status: 'open',
+  },
+  {
+    id: 2,
+    vendor_username: 'vendor2',
+    storeName: 'Highlands Coffee & Tea',
+    phone: '0922334455',
+    address: '456 Phạm Văn Thuận, Biên Hòa',
+    commissionRate: 10,
+    status: 'open',
   },
 ];
 

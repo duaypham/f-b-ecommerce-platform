@@ -1,8 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient, API_ENDPOINTS } from '../constants/api';
-import { FALLBACK_PRODUCTS, FALLBACK_VOUCHERS } from '../constants/data';
-
+import { FALLBACK_PRODUCTS, FALLBACK_VOUCHERS, FALLBACK_STORES } from '../constants/data';
 const AppContext = createContext();
 
 const DEMO_FALLBACK_USERS = {
@@ -120,6 +119,7 @@ export const AppProvider = ({ children }) => {
       console.log('Không kết nối được XAMPP, kích hoạt dữ liệu dự phòng:', error.message);
       if (products.length === 0) setProducts(FALLBACK_PRODUCTS);
       if (vouchers.length === 0) setVouchers(FALLBACK_VOUCHERS);
+      if (stores.length === 0) setStores(FALLBACK_STORES);
 
       // Khôi phục đơn hàng từ cache thiết bị khi mất kết nối mạng
       const savedOrders = await AsyncStorage.getItem('@cachedOrders');
@@ -268,12 +268,23 @@ export const AppProvider = ({ children }) => {
   const reOrder = (oldItems) => {
     if (!Array.isArray(oldItems) || oldItems.length === 0) return;
     let updatedCart = [...cart];
+
     oldItems.forEach((item) => {
-      updatedCart.push({
-        ...item,
-        cartItemId: Date.now().toString() + Math.random().toString(36).substring(2, 6),
-        signature: `${item.productId}_${item.size}_${item.sugar}_${item.ice}_${(item.toppings || []).join(',')}`,
-      });
+      const toppingsKey = (item.toppings || []).slice().sort().join(',');
+      const signature = `${item.productId}_${item.size}_${item.sugar}_${item.ice}_${toppingsKey}`;
+      const existingIndex = updatedCart.findIndex((c) => c.signature === signature);
+
+      if (existingIndex > -1) {
+        updatedCart[existingIndex].quantity += Number(item.quantity || 1);
+        updatedCart[existingIndex].totalPrice =
+          updatedCart[existingIndex].quantity * updatedCart[existingIndex].unitPrice;
+      } else {
+        updatedCart.push({
+          ...item,
+          cartItemId: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+          signature,
+        });
+      }
     });
     syncCartToStorage(updatedCart);
   };
