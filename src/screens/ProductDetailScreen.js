@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { SIZES, SUGAR_LEVELS, ICE_LEVELS, TOPPINGS } from '../constants/data';
@@ -43,6 +44,9 @@ export default function ProductDetailScreen({ route, navigation }) {
   const [quantity, setQuantity] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
 
+  // State cho thông báo Toast thêm vào giỏ chuẩn Shopee
+  const [toastVisible, setToastVisible] = useState(false);
+
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -65,7 +69,12 @@ export default function ProductDetailScreen({ route, navigation }) {
   const productReviews = useMemo(() => {
     return reviews.filter((r) => Number(r.product_id) === Number(product.id));
   }, [reviews, product.id]);
-
+const availableToppings = useMemo(() => {
+    return TOPPINGS.filter((tp) => {
+      if (!tp.categories || tp.categories.length === 0) return true;
+      return tp.categories.includes(product.category);
+    });
+  }, [product.category]);
   const handleToggleTopping = (topping) => {
     const exists = selectedToppings.some((t) => t.id === topping.id);
     if (exists) {
@@ -83,6 +92,7 @@ export default function ProductDetailScreen({ route, navigation }) {
   const totalPrice = unitPrice * quantity;
   const formatCurrency = (val) => `${Number(val || 0).toLocaleString('vi-VN')}đ`;
 
+  // Thêm vào giỏ với hiệu ứng Toast tự động quay về menu
   const handleAddToCart = () => {
     if (!product.isAvailable) {
       Alert.alert('Thông báo', 'Món này hiện đang tạm ngưng phục vụ!');
@@ -104,10 +114,16 @@ export default function ProductDetailScreen({ route, navigation }) {
       totalPrice,
     });
 
-    Alert.alert('Thành công', `Đã thêm ${quantity}x ${product.name} vào giỏ hàng.`, [
-      { text: 'Chọn tiếp', onPress: () => navigation.goBack() },
-      { text: 'Xem giỏ hàng', onPress: () => navigation.replace('Cart') },
-    ]);
+    // Mở Toast không gây gián đoạn và tự đóng sau 1.8s
+    setToastVisible(true);
+    setTimeout(() => {
+      setToastVisible(false);
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Home');
+      }
+    }, 1800);
   };
 
   const handleSubmitReview = async () => {
@@ -179,8 +195,7 @@ export default function ProductDetailScreen({ route, navigation }) {
                 ? `⭐ ${Number(product.avgRating).toFixed(1)} (${product.reviewCount} đánh giá)`
                 : '🆕 Chưa có đánh giá'}{' '}
               • Đã bán {product.soldCount || 0}
-          </Text>
-          
+            </Text>
           </View>
 
           <Text style={styles.descriptionText}>
@@ -249,22 +264,31 @@ export default function ProductDetailScreen({ route, navigation }) {
         </View>
 
         <View style={styles.optionSection}>
-          <Text style={styles.sectionTitle}>Topping</Text>
-          {TOPPINGS.map((tp) => {
-            const isChecked = selectedToppings.some((t) => t.id === tp.id);
-            return (
-              <TouchableOpacity
-                key={tp.id}
-                style={[styles.toppingRow, isChecked && styles.toppingRowActive]}
-                onPress={() => handleToggleTopping(tp)}
-              >
-                <Text style={styles.toppingName}>
-                  {isChecked ? '☑️ ' : '⬜ '} {tp.name}
-                </Text>
-                <Text style={styles.toppingPrice}>+{formatCurrency(tp.price)}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          <Text style={styles.sectionTitle}>
+            Topping ({availableToppings.length})
+          </Text>
+
+          {availableToppings.length === 0 ? (
+            <Text style={{ fontSize: 13, color: '#8D6E63', fontStyle: 'italic', paddingVertical: 6 }}>
+              Món này không hỗ trợ thêm topping.
+            </Text>
+          ) : (
+            availableToppings.map((tp) => {
+              const isChecked = selectedToppings.some((t) => t.id === tp.id);
+              return (
+                <TouchableOpacity
+                  key={tp.id}
+                  style={[styles.toppingRow, isChecked && styles.toppingRowActive]}
+                  onPress={() => handleToggleTopping(tp)}
+                >
+                  <Text style={styles.toppingName}>
+                    {isChecked ? '☑️ ' : '⬜ '} {tp.name}
+                  </Text>
+                  <Text style={styles.toppingPrice}>+{formatCurrency(tp.price)}</Text>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         <View style={styles.optionSection}>
@@ -337,6 +361,7 @@ export default function ProductDetailScreen({ route, navigation }) {
         </View>
       </ScrollView>
 
+      {/* Thanh đặt món dưới cùng */}
       {isCustomerOrGuest ? (
         <View style={styles.bottomBar}>
           <View style={styles.qtyControl}>
@@ -374,6 +399,21 @@ export default function ProductDetailScreen({ route, navigation }) {
           </Text>
         </View>
       )}
+
+      {/* Hộp thoại thông báo HUD Toast phong cách Shopee */}
+      <Modal
+        visible={toastVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setToastVisible(false)}
+      >
+        <View style={styles.toastOverlay}>
+          <View style={styles.shopeeToastBox}>
+            <Text style={styles.checkmarkIcon}>✓</Text>
+            <Text style={styles.shopeeToastText}>Đã thêm vào giỏ!</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -433,7 +473,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     padding: 16,
   },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#4A3222', marginBottom: 10 },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#3E2723', marginBottom: 10 },
   optionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionChip: {
     paddingHorizontal: 14,
@@ -550,4 +590,37 @@ const styles = StyleSheet.create({
   },
   addCartBtnDisabled: { backgroundColor: '#9E9E9E' },
   addCartBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
+
+  // Styles cho HUD Toast Shopee
+  toastOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shopeeToastBox: {
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  checkmarkIcon: {
+    color: '#FFFFFF',
+    fontSize: 40,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  shopeeToastText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });

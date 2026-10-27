@@ -148,19 +148,82 @@ export default function CartScreen({ navigation }) {
   const totalAmount = Math.max(0, subTotal - discountAmount);
 
   useEffect(() => {
-  if (!appliedVoucher) return;
-  const eligibleAmt = getEligibleSubTotalForVoucher(appliedVoucher);
-  if (eligibleAmt < appliedVoucher.minOrder) {
-    const minStr = `${Number(appliedVoucher.minOrder).toLocaleString('vi-VN')}đ`;
-    setVoucherFeedback(
-      `Đã tự động gỡ mã ${appliedVoucher.code} do tổng món giảm xuống dưới ${minStr}.`
-    );
-    setAppliedVoucher(null);
-    setVoucherInput('');
-  }
-}, [subTotal, cart, appliedVoucher]);
+    if (!appliedVoucher) return;
+    const eligibleAmt = getEligibleSubTotalForVoucher(appliedVoucher);
+    if (eligibleAmt < appliedVoucher.minOrder) {
+      const minStr = `${Number(appliedVoucher.minOrder).toLocaleString('vi-VN')}đ`;
+      setVoucherFeedback(
+        `Đã tự động gỡ mã ${appliedVoucher.code} do tổng món giảm xuống dưới ${minStr}.`
+      );
+      setAppliedVoucher(null);
+      setVoucherInput('');
+    }
+  }, [subTotal, cart, appliedVoucher]);
 
   const formatCurrency = (val) => `${Number(val || 0).toLocaleString('vi-VN')}đ`;
+
+  // Tính giá sau giảm và kiểm tra voucher có áp dụng cho từng món cụ thể hay không
+  const getItemVoucherInfo = (item) => {
+    if (!appliedVoucher || discountAmount <= 0) {
+      return { isDiscounted: false, finalPrice: item.totalPrice };
+    }
+
+    const isEligible =
+      !appliedVoucher.store_id || Number(item.storeId) === Number(appliedVoucher.store_id);
+
+    if (!isEligible) {
+      return { isDiscounted: false, finalPrice: item.totalPrice };
+    }
+
+    const targetSubTotal = getEligibleSubTotalForVoucher(appliedVoucher);
+    if (targetSubTotal <= 0) {
+      return { isDiscounted: false, finalPrice: item.totalPrice };
+    }
+
+    // Phân bổ phần tiền giảm theo tỷ trọng của món trong nhóm được áp mã
+    const itemDiscount = Math.round((item.totalPrice / targetSubTotal) * discountAmount);
+    const finalPrice = Math.max(0, item.totalPrice - itemDiscount);
+
+    return {
+      isDiscounted: itemDiscount > 0,
+      finalPrice,
+    };
+  };
+
+  // 1. HỘP THOẠI XÁC NHẬN KHI XÓA MÓN
+  const confirmRemoveItem = (cartItemId, itemName) => {
+    Alert.alert(
+      'Xóa món khỏi giỏ',
+      `Bạn có chắc muốn bỏ "${itemName || 'món này'}" khỏi giỏ hàng không?`,
+      [
+        { text: 'Giữ lại', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: () => removeFromCart(cartItemId),
+        },
+      ]
+    );
+  };
+
+  const handleDecreaseQuantity = (item) => {
+    if (item.quantity <= 1) {
+      confirmRemoveItem(item.cartItemId, item.name);
+    } else {
+      updateCartQuantity(item.cartItemId, -1);
+    }
+  };
+
+  const handleClearAllCart = () => {
+    Alert.alert(
+      'Xóa toàn bộ giỏ hàng',
+      'Bạn có chắc chắn muốn xóa tất cả đồ uống trong giỏ không?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        { text: 'Xóa tất cả', style: 'destructive', onPress: clearCart },
+      ]
+    );
+  };
 
   const handleApplyVoucherCode = (codeToApply) => {
     const cleanCode = (codeToApply || voucherInput).trim().toUpperCase();
@@ -169,7 +232,6 @@ export default function CartScreen({ navigation }) {
       return;
     }
 
-    // Nếu bấm lại vào chính mã đang áp dụng -> Hủy chọn mã đó
     if (appliedVoucher?.code?.toUpperCase() === cleanCode && codeToApply) {
       setAppliedVoucher(null);
       setVoucherInput('');
@@ -266,15 +328,15 @@ export default function CartScreen({ navigation }) {
         throw new Error('Geocode failed');
       }
     } catch (error) {
-      // Danh sách các địa chỉ tuyến đường lớn tại Biên Hòa để xoay vòng ngẫu nhiên khi mất GPS/Mạng
       const bienHoaFallbackList = [
         '120 Võ Thị Sáu, Phường Thống Nhất, Thành phố Biên Hòa, Đồng Nai',
         '255 Đường Đồng Khởi, Phường Tân Hiệp, Thành phố Biên Hòa, Đồng Nai',
         '1096 Phạm Văn Thuận, Phường Tân Mai, Thành phố Biên Hòa, Đồng Nai',
         '45 Nguyễn Ái Quốc, Phường Tân Phong, Thành phố Biên Hòa, Đồng Nai',
-        '302 Đường 30 Tháng 4, Phường Trung Dũng, Thành phố Biên Hòa, Đồng Nai'
+        '302 Đường 30 Tháng 4, Phường Trung Dũng, Thành phố Biên Hòa, Đồng Nai',
       ];
-      const randomAddress = bienHoaFallbackList[Math.floor(Math.random() * bienHoaFallbackList.length)];
+      const randomAddress =
+        bienHoaFallbackList[Math.floor(Math.random() * bienHoaFallbackList.length)];
       setAddress(randomAddress);
     } finally {
       setLoadingGps(false);
@@ -308,24 +370,22 @@ export default function CartScreen({ navigation }) {
       const codeForStore =
         i === 0 ? generatedCode : `${generatedCode}_${i + 1}`;
 
-      // Tính số tiền giảm từ Voucher áp dụng riêng cho cửa hàng này
       let storeDiscount = 0;
       let storeVoucherCode = null;
 
       if (appliedVoucher && discountAmount > 0) {
         if (appliedVoucher.store_id) {
-          // Voucher của quán nào thì chỉ giảm cho đơn của đúng quán đó
           if (Number(appliedVoucher.store_id) === Number(group.store_id)) {
             storeDiscount = discountAmount;
             storeVoucherCode = appliedVoucher.code;
           }
         } else {
-          // Voucher Toàn sàn: phân bổ theo tỷ lệ giá trị đơn của từng quán
           storeDiscount =
             storeGroups.length === 1
               ? discountAmount
               : Math.round((group.storeSubTotal / subTotal) * discountAmount);
-          storeVoucherCode = appliedVoucher.code;
+          // Gắn mã voucher cho đơn đầu tiên để backend không chặn trùng mã ở các đơn sau
+          storeVoucherCode = i === 0 ? appliedVoucher.code : null;
         }
       }
 
@@ -475,57 +535,67 @@ export default function CartScreen({ navigation }) {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Món đã chọn ({cart.length})</Text>
-            <TouchableOpacity onPress={clearCart}>
+            <TouchableOpacity onPress={handleClearAllCart}>
               <Text style={styles.clearAllText}>Xóa tất cả</Text>
             </TouchableOpacity>
           </View>
 
-          {cart.map((item) => (
-            <View key={item.cartItemId} style={styles.cartItem}>
-              <Image source={{ uri: item.image }} style={styles.itemImg} />
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemStore}>{item.storeName}</Text>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemOptions}>
-                  Size {item.size} • {item.sugar} • {item.ice}
-                </Text>
-                {item.toppings && item.toppings.length > 0 && (
-                  <Text style={styles.itemToppings}>
-                    + {item.toppings.join(', ')}
+          {cart.map((item) => {
+            const { isDiscounted, finalPrice } = getItemVoucherInfo(item);
+            return (
+              <View key={item.cartItemId} style={styles.cartItem}>
+                <Image source={{ uri: item.image }} style={styles.itemImg} />
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemStore}>{item.storeName}</Text>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemOptions}>
+                    Size {item.size} • {item.sugar} • {item.ice}
                   </Text>
-                )}
+                  {item.toppings && item.toppings.length > 0 && (
+                    <Text style={styles.itemToppings}>
+                      + {item.toppings.join(', ')}
+                    </Text>
+                  )}
 
-                <View style={styles.itemBottomRow}>
-                  <Text style={styles.itemTotalPrice}>
-                    {formatCurrency(item.totalPrice)}
-                  </Text>
+                  {/* Nhãn Shopee: hiển thị rõ món này đã được hưởng voucher */}
+                  {isDiscounted && (
+                    <View style={styles.voucherItemBadge}>
+                      <Text style={styles.voucherItemBadgeText}>Đã áp dụng voucher</Text>
+                    </View>
+                  )}
 
-                  <View style={styles.qtyBox}>
-                    <TouchableOpacity
-                      style={styles.qtyBtn}
-                      onPress={() => updateCartQuantity(item.cartItemId, -1)}
-                    >
-                      <Text style={styles.qtyBtnText}>−</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.qtyText}>{item.quantity}</Text>
-                    <TouchableOpacity
-                      style={styles.qtyBtn}
-                      onPress={() => updateCartQuantity(item.cartItemId, 1)}
-                    >
-                      <Text style={styles.qtyBtnText}>+</Text>
-                    </TouchableOpacity>
+                  <View style={styles.itemBottomRow}>
+                    <Text style={styles.itemTotalPrice}>
+                      {formatCurrency(finalPrice)}
+                    </Text>
 
-                    <TouchableOpacity
-                      style={styles.removeBtn}
-                      onPress={() => removeFromCart(item.cartItemId)}
-                    >
-                      <Text style={styles.removeBtnText}>🗑️</Text>
-                    </TouchableOpacity>
+                    <View style={styles.qtyBox}>
+                      <TouchableOpacity
+                        style={styles.qtyBtn}
+                        onPress={() => handleDecreaseQuantity(item)}
+                      >
+                        <Text style={styles.qtyBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.qtyText}>{item.quantity}</Text>
+                      <TouchableOpacity
+                        style={styles.qtyBtn}
+                        onPress={() => updateCartQuantity(item.cartItemId, 1)}
+                      >
+                        <Text style={styles.qtyBtnText}>+</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.removeBtn}
+                        onPress={() => confirmRemoveItem(item.cartItemId, item.name)}
+                      >
+                        <Text style={styles.removeBtnText}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <View style={styles.sectionCard}>
@@ -724,7 +794,7 @@ export default function CartScreen({ navigation }) {
 
           <View style={styles.summaryBox}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Giá gốc (Tạm tính):</Text>
+              <Text style={styles.summaryLabel}>Giá gốc:</Text>
               <Text style={styles.summaryVal}>{formatCurrency(subTotal)}</Text>
             </View>
             <View style={styles.summaryRow}>
@@ -776,11 +846,7 @@ export default function CartScreen({ navigation }) {
             <ActivityIndicator color="#FFF" />
           ) : (
             <Text style={styles.checkoutBtnText}>
-              {!currentUser
-                ? 'ĐĂNG NHẬP ĐỂ ĐẶT'
-                : paymentMethod === 'Chuyển khoản QR'
-                ? 'MỞ MÃ QR'
-                : 'ĐẶT HÀNG'}
+              {!currentUser ? 'ĐĂNG NHẬP ĐỂ ĐẶT' : 'ĐẶT HÀNG'}
             </Text>
           )}
         </TouchableOpacity>
@@ -932,6 +998,21 @@ const styles = StyleSheet.create({
   itemName: { fontSize: 14, fontWeight: 'bold', color: '#3E2723', marginTop: 2 },
   itemOptions: { fontSize: 12, color: '#616161', marginTop: 2 },
   itemToppings: { fontSize: 12, color: '#6F4E37', marginTop: 2 },
+  voucherItemBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FBE9E7',
+    borderWidth: 0.5,
+    borderColor: '#FF7043',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  voucherItemBadgeText: {
+    fontSize: 10,
+    color: '#D84315',
+    fontWeight: '600',
+  },
   itemBottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

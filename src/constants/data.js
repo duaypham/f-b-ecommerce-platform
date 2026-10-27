@@ -27,12 +27,21 @@ export const ICE_LEVELS = [
 ];
 
 export const TOPPINGS = [
-  { id: 't1', name: 'Trân châu đường đen', price: 5000 },
-  { id: 't2', name: 'Trân châu trắng giòn', price: 5000 },
-  { id: 't3', name: 'Kem phô mai Macchiato', price: 10000 },
-  { id: 't4', name: 'Pudding trứng', price: 7000 },
-  { id: 't5', name: 'Thạch sương sáo', price: 5000 },
-  { id: 't6', name: 'Đào ngâm giòn', price: 8000 },
+  // Dành riêng hoặc hợp với Trà sữa
+  { id: 't1', name: 'Trân châu đường đen', price: 5000, categories: ['Trà sữa'] },
+  { id: 't4', name: 'Pudding trứng', price: 7000, categories: ['Trà sữa'] },
+
+  // Dành cho Trà sữa & Trà trái cây
+  { id: 't2', name: 'Trân châu trắng giòn', price: 5000, categories: ['Trà sữa', 'Trà trái cây'] },
+  { id: 't6', name: 'Đào ngâm giòn', price: 8000, categories: ['Trà trái cây'] },
+
+  // Dành cho Trà sữa & Cà phê
+  { id: 't3', name: 'Kem phô mai Macchiato', price: 10000, categories: ['Trà sữa', 'Cà phê'] },
+  { id: 't5', name: 'Thạch sương sáo', price: 5000, categories: ['Trà sữa', 'Cà phê'] },
+
+  // Dành cho Đá xay & Cà phê
+  { id: 't7', name: 'Kem Whipping béo', price: 8000, categories: ['Đá xay', 'Cà phê'] },
+  { id: 't8', name: 'Thạch cà phê cốt dừa', price: 7000, categories: ['Cà phê'] },
 ];
 
 export const ORDER_STATUS_STEPS = [
