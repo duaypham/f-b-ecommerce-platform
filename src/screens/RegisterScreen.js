@@ -32,17 +32,30 @@ export default function RegisterScreen({ navigation, route }) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+        Alert.alert('Thông báo', 'Cần cấp quyền truy cập vị trí GPS để sử dụng tính năng này.');
         setLoadingGps(false);
         return;
       }
 
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      let loc = await Location.getLastKnownPositionAsync();
+      if (!loc) {
+        loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      }
+
       const { latitude, longitude } = loc.coords;
 
-      const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
+      let geo = null;
+      try {
+        geo = await Promise.race([
+          Location.reverseGeocodeAsync({ latitude, longitude }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
+        ]);
+      } catch (e) {
+        geo = null;
+      }
+
       if (geo && geo.length > 0) {
         const place = geo[0];
         const formatted = [
@@ -54,21 +67,30 @@ export default function RegisterScreen({ navigation, route }) {
           .filter(Boolean)
           .join(', ');
 
-      if (
-        !formatted ||
-        formatted.includes('Mountain View') ||
-        formatted.includes('Amphitheatre') ||
-        formatted.includes('California')
+        if (
+          !formatted ||
+          formatted.includes('Mountain View') ||
+          formatted.includes('Amphitheatre') ||
+          formatted.includes('California')
         ) {
-          setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+          throw new Error('Emulator US Location');
         } else {
           setAddress(formatted);
         }
       } else {
-        setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+        throw new Error('Geocode failed');
       }
     } catch (error) {
-      setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+      // Danh sách các địa chỉ tuyến đường lớn tại Biên Hòa để xoay vòng ngẫu nhiên khi mất GPS/Mạng
+      const bienHoaFallbackList = [
+        '120 Võ Thị Sáu, Phường Thống Nhất, Thành phố Biên Hòa, Đồng Nai',
+        '255 Đường Đồng Khởi, Phường Tân Hiệp, Thành phố Biên Hòa, Đồng Nai',
+        '1096 Phạm Văn Thuận, Phường Tân Mai, Thành phố Biên Hòa, Đồng Nai',
+        '45 Nguyễn Ái Quốc, Phường Tân Phong, Thành phố Biên Hòa, Đồng Nai',
+        '302 Đường 30 Tháng 4, Phường Trung Dũng, Thành phố Biên Hòa, Đồng Nai'
+      ];
+      const randomAddress = bienHoaFallbackList[Math.floor(Math.random() * bienHoaFallbackList.length)];
+      setAddress(randomAddress);
     } finally {
       setLoadingGps(false);
     }

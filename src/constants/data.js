@@ -12,18 +12,17 @@ export const SIZES = [
   { id: 'L', label: 'Size L', price: 10000 },
 ];
 
-// Chuẩn hóa 4 mức đường và 4 mức đá (Từ ngữ + %)
 export const SUGAR_LEVELS = [
   'Không đường (0%)',
   'Ít ngọt (50%)',
-  'Vừa ngọt (70%)',
+  'Ngọt vừa (70%)',
   'Ngọt chuẩn (100%)',
 ];
 
 export const ICE_LEVELS = [
   'Không đá (0%)',
   'Ít đá (50%)',
-  'Vừa đá (70%)',
+  'Đá vừa (70%)',
   'Đá chuẩn (100%)',
 ];
 

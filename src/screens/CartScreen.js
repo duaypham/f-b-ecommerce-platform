@@ -217,17 +217,30 @@ export default function CartScreen({ navigation }) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setShowVirtualMap(true);
+        Alert.alert('Thông báo', 'Cần cấp quyền truy cập vị trí GPS để sử dụng tính năng này.');
         setLoadingGps(false);
         return;
       }
 
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      let loc = await Location.getLastKnownPositionAsync();
+      if (!loc) {
+        loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      }
+
       const { latitude, longitude } = loc.coords;
 
-      const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
+      let geo = null;
+      try {
+        geo = await Promise.race([
+          Location.reverseGeocodeAsync({ latitude, longitude }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
+        ]);
+      } catch (e) {
+        geo = null;
+      }
+
       if (geo && geo.length > 0) {
         const place = geo[0];
         const formatted = [
@@ -245,51 +258,113 @@ export default function CartScreen({ navigation }) {
           formatted.includes('Amphitheatre') ||
           formatted.includes('California')
         ) {
-          setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+          throw new Error('Emulator US Location');
         } else {
           setAddress(formatted);
         }
       } else {
-        setAddress('120 Võ Thị Sáu, P. Thống Nhất, TP. Biên Hòa, Đồng Nai');
+        throw new Error('Geocode failed');
       }
     } catch (error) {
-      setShowVirtualMap(true);
+      // Danh sách các địa chỉ tuyến đường lớn tại Biên Hòa để xoay vòng ngẫu nhiên khi mất GPS/Mạng
+      const bienHoaFallbackList = [
+        '120 Võ Thị Sáu, Phường Thống Nhất, Thành phố Biên Hòa, Đồng Nai',
+        '255 Đường Đồng Khởi, Phường Tân Hiệp, Thành phố Biên Hòa, Đồng Nai',
+        '1096 Phạm Văn Thuận, Phường Tân Mai, Thành phố Biên Hòa, Đồng Nai',
+        '45 Nguyễn Ái Quốc, Phường Tân Phong, Thành phố Biên Hòa, Đồng Nai',
+        '302 Đường 30 Tháng 4, Phường Trung Dũng, Thành phố Biên Hòa, Đồng Nai'
+      ];
+      const randomAddress = bienHoaFallbackList[Math.floor(Math.random() * bienHoaFallbackList.length)];
+      setAddress(randomAddress);
     } finally {
       setLoadingGps(false);
     }
   };
 
   const submitFinalOrderToServer = async (generatedCode, paymentStatusLabel) => {
-    const primaryStoreId = cart[0]?.storeId || 1;
-    const primaryStoreName = cart[0]?.storeName || 'Gong Cha Biên Hòa';
-
     setSubmittingOrder(true);
-    const res = await createOrder({
-      orderCode: generatedCode,
-      store_id: primaryStoreId,
-      storeName: primaryStoreName,
-      username: currentUser.username,
-      customerName: customerName.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      note: note.trim(),
-      paymentMethod,
-      paymentStatus: paymentStatusLabel,
-      voucherCode: appliedVoucher && discountAmount > 0 ? appliedVoucher.code : null,
-      subTotal,
-      discountAmount,
-      totalAmount,
-      items: cart,
+
+    const groupedByStore = {};
+    cart.forEach((item) => {
+      const sId = Number(item.storeId || 1);
+      if (!groupedByStore[sId]) {
+        groupedByStore[sId] = {
+          store_id: sId,
+          storeName: item.storeName || 'Cửa hàng đối tác',
+          items: [],
+          storeSubTotal: 0,
+        };
+      }
+      groupedByStore[sId].items.push(item);
+      groupedByStore[sId].storeSubTotal += Number(item.totalPrice || 0);
     });
+
+    const storeGroups = Object.values(groupedByStore);
+    const createdCodes = [];
+    let lastError = '';
+
+    for (let i = 0; i < storeGroups.length; i++) {
+      const group = storeGroups[i];
+      const codeForStore =
+        i === 0 ? generatedCode : `${generatedCode}_${i + 1}`;
+
+      // Tính số tiền giảm từ Voucher áp dụng riêng cho cửa hàng này
+      let storeDiscount = 0;
+      let storeVoucherCode = null;
+
+      if (appliedVoucher && discountAmount > 0) {
+        if (appliedVoucher.store_id) {
+          // Voucher của quán nào thì chỉ giảm cho đơn của đúng quán đó
+          if (Number(appliedVoucher.store_id) === Number(group.store_id)) {
+            storeDiscount = discountAmount;
+            storeVoucherCode = appliedVoucher.code;
+          }
+        } else {
+          // Voucher Toàn sàn: phân bổ theo tỷ lệ giá trị đơn của từng quán
+          storeDiscount =
+            storeGroups.length === 1
+              ? discountAmount
+              : Math.round((group.storeSubTotal / subTotal) * discountAmount);
+          storeVoucherCode = appliedVoucher.code;
+        }
+      }
+
+      const storeTotal = Math.max(0, group.storeSubTotal - storeDiscount);
+
+      const res = await createOrder({
+        orderCode: codeForStore,
+        store_id: group.store_id,
+        storeName: group.storeName,
+        username: currentUser.username,
+        customerName: customerName.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        note: note.trim(),
+        paymentMethod,
+        paymentStatus: paymentStatusLabel,
+        voucherCode: storeVoucherCode,
+        subTotal: group.storeSubTotal,
+        discountAmount: storeDiscount,
+        totalAmount: storeTotal,
+        items: group.items,
+      });
+
+      if (res.success) {
+        createdCodes.push(res.orderCode || codeForStore);
+      } else {
+        lastError = res.message;
+      }
+    }
+
     setSubmittingOrder(false);
 
-    if (res.success) {
+    if (createdCodes.length > 0) {
       setAppliedVoucher(null);
       setVoucherInput('');
       setVoucherFeedback('');
       Alert.alert(
         'Đặt hàng thành công',
-        `Mã đơn: #${res.orderCode}\nCửa hàng đang chuẩn bị món cho bạn!`,
+        `Mã đơn: #${createdCodes.join(', #')}\nCửa hàng đang chuẩn bị món cho bạn!`,
         [
           {
             text: 'Xem đơn hàng',
@@ -302,7 +377,7 @@ export default function CartScreen({ navigation }) {
         ]
       );
     } else {
-      Alert.alert('Lỗi', res.message);
+      Alert.alert('Lỗi', lastError || 'Không thể tạo đơn hàng!');
     }
   };
 
